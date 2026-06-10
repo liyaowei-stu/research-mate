@@ -351,8 +351,8 @@ for skill in "${REPO}"/third-party/academic-research-skills/*/; do
 done
 
 # Priority 4: claude-scientific-skills
-for skill in "${REPO}"/third-party/claude-scientific-skills/scientific-skills/*/; do
-    [[ -d "$skill" ]] || continue
+for skill in "${REPO}"/third-party/claude-scientific-skills/skills/*/; do
+    [[ -d "$skill" && -f "$skill/SKILL.md" ]] || continue
     register_skill "$(basename "$skill")" "$skill" "claude-scientific-skills" || true
 done
 

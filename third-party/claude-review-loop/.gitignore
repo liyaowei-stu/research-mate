@@ -1,6 +1,0 @@
-# Review loop state (ephemeral, per-session)
-.claude/review-loop.local.md
-.claude/review-loop.log
-
-# Review artifacts (generated, not source)
-reviews/

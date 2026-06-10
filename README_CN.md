@@ -45,7 +45,7 @@ ResearchMate
 │   ├── autoresearch (Karpathy)      program.md + train.py — 单 GPU 自主 ML 迭代
 │   ├── pi-autoresearch              1 skill · 1 extension — 通用自主优化循环
 │   ├── academic-research-skills     4 skills (13+12+7-agent) — 13-agent 文献 · 12-agent 写作
-│   ├── claude-review-loop           2 commands · 1 stop hook — 代码审查自动化
+│   ├── codex-plugin-cc              7 commands · 1 agent · 3 skills + hooks — OpenAI Codex 代码审查与任务委派
 │   └── claude-scientific-skills     175 skills · 250+ 数据源 — 科学数据库接入
 │
 ├── install.sh                       curl | bash 远程安装
@@ -180,10 +180,10 @@ program.md + train.py。给 AI agent 一个 GPU，让它自主修改代码、训
 
 1 skill, 1 extension。Domain-agnostic 的自主实验循环：不限于 ML，也可优化 build speed、bundle size、测试速度等。
 
-### claude-review-loop -- 代码审查自动化
-> [hamelsmu/claude-review-loop](https://github.com/hamelsmu/claude-review-loop) ![GitHub stars](https://img.shields.io/github/stars/hamelsmu/claude-review-loop?style=flat-square)
+### codex-plugin-cc -- Codex 代码审查与任务委派
+> [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) ![GitHub stars](https://img.shields.io/github/stars/openai/codex-plugin-cc?style=flat-square)
 
-2 commands, 1 stop hook。开发完成后自动触发 Codex 独立审查，提供第三方视角的代码质量反馈。
+OpenAI 官方插件。7 个带 namespace 的命令（`/codex:review`、`/codex:adversarial-review`、`/codex:rescue`、`/codex:status`、`/codex:result`、`/codex:cancel`、`/codex:setup`）外加 `codex-rescue` 子代理。通过本地 Codex CLI 做代码审查与任务委派，支持后台作业和可选的审查门禁。需 `codex` CLI + ChatGPT/OpenAI 登录。
 
 ## 功能目录
 
@@ -241,10 +241,10 @@ program.md + train.py。给 AI agent 一个 GPU，让它自主修改代码、训
 
 | 功能 | 类型 | 来源 | 说明 |
 |------|------|------|------|
-| `/review-loop` | Command | claude-review-loop | Codex 自动独立审查 |
+| `/codex:review` | Command | codex-plugin-cc | Codex 独立代码审查（只读）|
+| `/codex:rescue` | Command | codex-plugin-cc | 把任务委派给 Codex（调试、修复、调查）|
 | `/code-review` | Command | config | 代码质量审查 |
 | `/test-coverage` | Command | config | 测试覆盖率检查 |
-| Stop Hook | Hook | claude-review-loop | 退出时自动触发 Codex review |
 
 ### 科学数据库
 
@@ -273,7 +273,7 @@ program.md + train.py。给 AI agent 一个 GPU，让它自主修改代码、训
 | 类型 | 数量 | 来源分布 |
 |------|------|---------|
 | **Skills** | 230+ | config: 24, ARIS: 27, academic: 4, scientific: 175 |
-| **Commands** | 25+ | config: 23, review-loop: 2 |
+| **Commands** | 30+ | config: 23, codex-plugin: 7 |
 | **Agents** | 7 | config: 7 |
 | **MCP Servers** | 3 | ARIS (Codex, LLM-chat, MiniMax) |
 | **Contexts** | 4 | config |
@@ -377,6 +377,6 @@ setup.sh 自动检测平台并给出安装提示。
 - [autoresearch](https://github.com/karpathy/autoresearch) by [@karpathy](https://github.com/karpathy)
 - [pi-autoresearch](https://github.com/davebcn87/pi-autoresearch) by [@davebcn87](https://github.com/davebcn87)
 - [Auto-claude-code-research-in-sleep](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep) by [@wanshuiyin](https://github.com/wanshuiyin)
-- [claude-review-loop](https://github.com/hamelsmu/claude-review-loop) by [@hamelsmu](https://github.com/hamelsmu)
+- [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) by [@openai](https://github.com/openai)
 - [academic-research-skills](https://github.com/Imbad0202/academic-research-skills) by [@Imbad0202](https://github.com/Imbad0202)
 - [claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) by [@K-Dense-AI](https://github.com/K-Dense-AI)

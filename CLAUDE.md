@@ -18,7 +18,7 @@ AI researcher's one-click Claude Code toolkit.
 | `third-party/aris/` | wanshuiyin/Auto-claude-code-research-in-sleep | ML research automation |
 | `third-party/autoresearch/` | karpathy/autoresearch | Autonomous ML experiments |
 | `third-party/pi-autoresearch/` | davebcn87/pi-autoresearch | Domain-agnostic optimization loop |
-| `third-party/claude-review-loop/` | hamelsmu/claude-review-loop | Codex code review |
+| `third-party/codex-plugin-cc/` | openai/codex-plugin-cc | Codex code review & task delegation |
 | `third-party/academic-research-skills/` | Imbad0202/academic-research-skills | Academic workflow |
 | `third-party/claude-scientific-skills/` | K-Dense-AI/claude-scientific-skills | Scientific databases |
 

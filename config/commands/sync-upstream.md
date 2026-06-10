@@ -11,7 +11,7 @@ When the user runs `/sync-upstream`, do the following:
    - `aris` — ARIS (Auto-claude-code-research-in-sleep)
    - `autoresearch` — Karpathy's autoresearch
    - `pi-autoresearch` — Pi-autoresearch
-   - `claude-review-loop` — Claude Review Loop
+   - `codex-plugin-cc` — OpenAI Codex plugin (code review & task delegation)
    - `academic-research-skills` — Academic Research Skills
    - `claude-scientific-skills` — Claude Scientific Skills
    - `all` — Sync everything

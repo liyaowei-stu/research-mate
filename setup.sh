@@ -370,16 +370,19 @@ if [[ -s "$CONFLICT_LOG" ]]; then
 fi
 
 # ════════════════════════════════════════════
-# 5. claude-review-loop: commands + hook
+# 5. codex-plugin-cc: local marketplace + plugin
 # ════════════════════════════════════════════
-echo "=== Installing claude-review-loop ==="
-REVIEW_LOOP="${REPO}/third-party/claude-review-loop/plugins/review-loop"
-if [[ -d "$REVIEW_LOOP/commands" ]]; then
-    for cmd in "${REVIEW_LOOP}"/commands/*.md; do
-        [[ -f "$cmd" ]] || continue
-        ln -sfn "$cmd" "${REPO}/config/commands/$(basename "$cmd")"
-    done
-    echo "  ✓ commands linked"
+echo "=== Installing codex-plugin-cc ==="
+CODEX_PLUGIN="${REPO}/third-party/codex-plugin-cc"
+if [[ -n "$CLAUDE_BIN" ]] && [[ -d "$CODEX_PLUGIN/.claude-plugin" ]]; then
+    "$CLAUDE_BIN" plugin marketplace add "$CODEX_PLUGIN" 2>/dev/null && \
+        echo "  ✓ marketplace added (openai-codex)" || \
+        echo "  △ marketplace add (may already exist)"
+    "$CLAUDE_BIN" plugin install codex@openai-codex 2>/dev/null && \
+        echo "  ✓ plugin installed (codex@openai-codex)" || \
+        echo "  △ plugin install (may already be installed)"
+else
+    echo "  △ Skipped (need claude CLI + codex-plugin-cc subtree)"
 fi
 
 # ════════════════════════════════════════════

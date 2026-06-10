@@ -44,7 +44,7 @@
  │   ├── Auto-claude-code-research-in-sleep (ARIS)/  27 skills, 3 MCP servers — AI research automation
  │   ├── autoresearch/                program.md + train.py — Autonomous ML iteration on single GPU
  │   ├── pi-autoresearch/             1 skill, 1 extension — Domain-agnostic autonomous optimization loop
- │   ├── claude-review-loop/          2 commands, 1 stop hook — Automated Codex code review
+ │   ├── codex-plugin-cc/             7 commands, 1 agent, 3 skills + hooks — OpenAI Codex code review & task delegation
  │   ├── academic-research-skills/    4 skills (13+12+7-agent systems) — Full academic workflow
  │   └── claude-scientific-skills/    175 scientific data source skills — Scientific database access
  │
@@ -165,10 +165,10 @@ Not limited to ML -- optimize any quantifiable metric (build speed, bundle size,
 
 4 skills: deep-research (13-agent PRISMA literature review), academic-paper (12-agent writing system), paper-reviewer (7-agent peer review), academic-pipeline (10-stage orchestrator).
 
-### claude-review-loop -- Automated Code Review
-> [hamelsmu/claude-review-loop](https://github.com/hamelsmu/claude-review-loop) ![GitHub stars](https://img.shields.io/github/stars/hamelsmu/claude-review-loop?style=flat-square)
+### codex-plugin-cc -- Codex Code Review & Task Delegation
+> [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) ![GitHub stars](https://img.shields.io/github/stars/openai/codex-plugin-cc?style=flat-square)
 
-2 commands, 1 stop hook. Triggers Codex for independent review after development. Provides third-party perspective on code quality with iterative feedback loops.
+Official OpenAI plugin. 7 namespaced commands (`/codex:review`, `/codex:adversarial-review`, `/codex:rescue`, `/codex:status`, `/codex:result`, `/codex:cancel`, `/codex:setup`) plus a `codex-rescue` subagent. Delegates code review and tasks to your local Codex CLI; supports background jobs and an optional review gate. Requires `codex` CLI + ChatGPT/OpenAI auth.
 
 ### claude-scientific-skills -- Scientific Data Access
 > [K-Dense-AI/claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) ![GitHub stars](https://img.shields.io/github/stars/K-Dense-AI/claude-scientific-skills?style=flat-square)
@@ -231,7 +231,8 @@ Not limited to ML -- optimize any quantifiable metric (build speed, bundle size,
 
 | Feature | Type | Source | Description |
 |---------|------|--------|-------------|
-| `/review-loop` | Command | claude-review-loop | Codex independent review after task completion |
+| `/codex:review` | Command | codex-plugin-cc | Codex independent code review (read-only) |
+| `/codex:rescue` | Command | codex-plugin-cc | Delegate a task to Codex (debug, fix, investigate) |
 | `/code-review` | Command | config | Code quality and security review |
 | `/test-coverage` | Command | config | Test coverage analysis (80%+ target) |
 | `/refactor-clean` | Command | config | Dead code identification and safe removal |
@@ -261,7 +262,7 @@ Skills for PDF, DOCX, PPTX, and XLSX creation, editing, and analysis.
 | Type | Count | Sources |
 |------|-------|---------|
 | **Skills** | 230+ | config: 24, ARIS: 27, academic: 4, scientific: 175 |
-| **Commands** | 25 | config: 23, review-loop: 2 |
+| **Commands** | 30 | config: 23, codex-plugin: 7 |
 | **Agents** | 7 | config |
 | **MCP Servers** | 3 | ARIS: Codex, LLM-chat, MiniMax |
 | **Rules** | 13 | config |
@@ -369,6 +370,6 @@ Built on top of these excellent projects:
 - [autoresearch](https://github.com/karpathy/autoresearch) by [@karpathy](https://github.com/karpathy)
 - [pi-autoresearch](https://github.com/davebcn87/pi-autoresearch) by [@davebcn87](https://github.com/davebcn87)
 - [Auto-claude-code-research-in-sleep (ARIS)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep) by [@wanshuiyin](https://github.com/wanshuiyin)
-- [claude-review-loop](https://github.com/hamelsmu/claude-review-loop) by [@hamelsmu](https://github.com/hamelsmu)
+- [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) by [@openai](https://github.com/openai)
 - [academic-research-skills](https://github.com/Imbad0202/academic-research-skills) by [@Imbad0202](https://github.com/Imbad0202)
 - [claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) by [@K-Dense-AI](https://github.com/K-Dense-AI)

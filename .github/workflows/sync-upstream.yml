@@ -27,8 +27,8 @@ jobs:
           - name: pi-autoresearch
             url: https://github.com/davebcn87/pi-autoresearch.git
             branch: main
-          - name: claude-review-loop
-            url: https://github.com/hamelsmu/claude-review-loop.git
+          - name: codex-plugin-cc
+            url: https://github.com/openai/codex-plugin-cc.git
             branch: main
           - name: academic-research-skills
             url: https://github.com/Imbad0202/academic-research-skills.git

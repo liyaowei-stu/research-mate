@@ -15,11 +15,12 @@ get_tool_info() {
         codex-plugin-cc)         echo "https://github.com/openai/codex-plugin-cc.git main" ;;
         academic-research-skills) echo "https://github.com/Imbad0202/academic-research-skills.git main" ;;
         claude-scientific-skills) echo "https://github.com/K-Dense-AI/claude-scientific-skills.git main" ;;
+        superpowers)             echo "https://github.com/obra/superpowers.git main" ;;
         *) return 1 ;;
     esac
 }
 
-ALL_TOOLS="aris autoresearch pi-autoresearch codex-plugin-cc academic-research-skills claude-scientific-skills"
+ALL_TOOLS="aris autoresearch pi-autoresearch codex-plugin-cc academic-research-skills claude-scientific-skills superpowers"
 
 sync_tool() {
     local name="$1"

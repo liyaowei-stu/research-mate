@@ -362,6 +362,12 @@ for skill in "${REPO}"/third-party/pi-autoresearch/skills/*/; do
     register_skill "$(basename "$skill")" "$skill" "pi-autoresearch" || true
 done
 
+# Priority 6: superpowers skills
+for skill in "${REPO}"/third-party/superpowers/skills/*/; do
+    [[ -d "$skill" && -f "$skill/SKILL.md" ]] || continue
+    register_skill "$(basename "$skill")" "$skill" "superpowers" || true
+done
+
 echo "  ✓ ${SKILL_COUNT} skills installed"
 
 if [[ -s "$CONFLICT_LOG" ]]; then

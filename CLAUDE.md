@@ -5,7 +5,7 @@ AI researcher's one-click Claude Code toolkit.
 ## Structure
 
 - `config/` — Claude Code config (agents, rules, commands, skills, contexts, settings.json.template)
-- `third-party/` — 6 curated tools (git subtree, independently syncable)
+- `third-party/` — 7 curated tools (git subtree, independently syncable)
 - `install.sh` — `curl | bash` remote installer (supports `--claude-path` / `--codex-path`)
 - `setup.sh` — Local setup (idempotent, cross-platform)
 - `sync-upstream.sh` — Manual upstream sync
@@ -21,6 +21,7 @@ AI researcher's one-click Claude Code toolkit.
 | `third-party/codex-plugin-cc/` | openai/codex-plugin-cc | Codex code review & task delegation |
 | `third-party/academic-research-skills/` | Imbad0202/academic-research-skills | Academic workflow |
 | `third-party/claude-scientific-skills/` | K-Dense-AI/claude-scientific-skills | Scientific databases |
+| `third-party/superpowers/` | obra/superpowers | Core skills: TDD, debugging, collaboration |
 
 ## Daily Operations
 

@@ -6,7 +6,7 @@
 
 **One-click Claude Code toolkit for AI researchers**
 
-*Your config + 6 curated tools in one repo. One-click deploy. Customize freely. Auto-sync upstream.*
+*Your config + 7 curated tools in one repo. One-click deploy. Customize freely. Auto-sync upstream.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)]()
@@ -23,7 +23,7 @@
 | Pain point | Status quo | ResearchMate |
 |------------|-----------|--------------|
 | Reconfigure Claude on every new machine | Manual copy, no version control | **One command** sets up everything |
-| Want to use multiple community tools | Installed separately, scattered | **6 tools unified** in one repo |
+| Want to use multiple community tools | Installed separately, scattered | **7 tools unified** in one repo |
 | Community tool gets updated | Fork and manually merge | **GitHub Actions auto-sync** + Claude review |
 | Customized a tool, can't sync anymore | Locked out of upstream | **git subtree** -- edit freely, still mergeable |
 | Dependency setup takes many steps | Read each README step by step | **Auto-detect** platform, deps, MCP registration |
@@ -40,13 +40,14 @@
  │   ├── 4 contexts                   (research, training, review, dev)
  │   └── settings.json.template
  │
- ├── third-party/                     6 curated tools (git subtree, auto-sync)
+ ├── third-party/                     7 curated tools (git subtree, auto-sync)
  │   ├── Auto-claude-code-research-in-sleep (ARIS)/  27 skills, 3 MCP servers — AI research automation
  │   ├── autoresearch/                program.md + train.py — Autonomous ML iteration on single GPU
  │   ├── pi-autoresearch/             1 skill, 1 extension — Domain-agnostic autonomous optimization loop
  │   ├── codex-plugin-cc/             7 commands, 1 agent, 3 skills + hooks — OpenAI Codex code review & task delegation
  │   ├── academic-research-skills/    4 skills (13+12+7-agent systems) — Full academic workflow
- │   └── claude-scientific-skills/    175 scientific data source skills — Scientific database access
+ │   ├── claude-scientific-skills/    175 scientific data source skills — Scientific database access
+ │   └── superpowers/                 14 skills — Software dev methodology (TDD, debugging, collaboration)
  │
  ├── install.sh          curl | bash one-liner
  ├── setup.sh            Local setup (idempotent)
@@ -137,10 +138,10 @@ claude mcp add minimax-chat -s user -- python3 ~/.research-mate/third-party/aris
 | Feature | How it works |
 |---------|-------------|
 | **One-click install** | `curl \| bash` -- auto-detects platform, Claude path, dependencies |
-| **6 curated tools** | Hand-picked third-party tools in one repo, all pre-configured |
+| **7 curated tools** | Hand-picked third-party tools in one repo, all pre-configured |
 | **Auto upstream sync** | GitHub Actions runs weekly + Claude Haiku reviews changes + auto-merge |
 | **Free to customize** | Edit any third-party code; git subtree keeps upstream merges clean |
-| **Priority conflict resolution** | Same-name skills auto-resolved: your config > ARIS > academic > scientific |
+| **Priority conflict resolution** | Same-name skills auto-resolved: your config > ARIS > academic > scientific > pi-autoresearch > superpowers |
 | **Symlink, not copy** | Edit repo files, changes take effect instantly -- no reinstall needed |
 
 ## Integrated Tools
@@ -174,6 +175,11 @@ Official OpenAI plugin. 7 namespaced commands (`/codex:review`, `/codex:adversar
 > [K-Dense-AI/claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) ![GitHub stars](https://img.shields.io/github/stars/K-Dense-AI/claude-scientific-skills?style=flat-square)
 
 175 production-ready skills accessing 250+ data sources (PubMed, ChEMBL, UniProt, COSMIC, SEC EDGAR, and more). 19 journal/conference paper format templates.
+
+### superpowers -- Software Development Methodology
+> [obra/superpowers](https://github.com/obra/superpowers) ![GitHub stars](https://img.shields.io/github/stars/obra/superpowers?style=flat-square)
+
+14 composable skills encoding a disciplined dev workflow: brainstorming (Socratic design), writing-plans, test-driven-development (RED-GREEN-REFACTOR), systematic-debugging (4-phase root cause), subagent-driven-development, code review, and git-worktree management. General-purpose -- complements the ML/research skills above. Note: skills are available but the auto-trigger bootstrap is not loaded under the symlink install; invoke them on demand.
 
 ## Feature Catalog
 
@@ -261,7 +267,7 @@ Skills for PDF, DOCX, PPTX, and XLSX creation, editing, and analysis.
 
 | Type | Count | Sources |
 |------|-------|---------|
-| **Skills** | 230+ | config: 24, ARIS: 27, academic: 4, scientific: 175 |
+| **Skills** | 240+ | config: 24, ARIS: 27, academic: 4, scientific: 175, superpowers: 14 |
 | **Commands** | 30 | config: 23, codex-plugin: 7 |
 | **Agents** | 7 | config |
 | **MCP Servers** | 3 | ARIS: Codex, LLM-chat, MiniMax |
@@ -342,7 +348,7 @@ cd ~/.research-mate && git pull && ./setup.sh
 | Capability | everything-claude-code | dot-claude | starter-kit | **ResearchMate** |
 |-----------|:---:|:---:|:---:|:---:|
 | Store your own config | ~ | ✅ | ~ | ✅ |
-| Integrate multiple third-party tools | ❌ | ❌ | ❌ | ✅ (6 tools) |
+| Integrate multiple third-party tools | ❌ | ❌ | ❌ | ✅ (7 tools) |
 | Independent upstream sync per tool | ❌ | ❌ | ~ (one only) | ✅ |
 | Local edits still mergeable with upstream | ❌ | N/A | ✅ | ✅ |
 | One-click new machine deploy | ✅ | ✅ | ~ | ✅ |
@@ -373,3 +379,4 @@ Built on top of these excellent projects:
 - [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) by [@openai](https://github.com/openai)
 - [academic-research-skills](https://github.com/Imbad0202/academic-research-skills) by [@Imbad0202](https://github.com/Imbad0202)
 - [claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) by [@K-Dense-AI](https://github.com/K-Dense-AI)
+- [superpowers](https://github.com/obra/superpowers) by [@obra](https://github.com/obra)

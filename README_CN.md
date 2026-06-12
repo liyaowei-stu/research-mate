@@ -6,7 +6,7 @@
 
 **AI 研究者的 Claude Code 一键工具箱**
 
-*你的配置 + 6 个精选工具，一键部署，自由魔改，自动同步上游。*
+*你的配置 + 7 个精选工具，一键部署，自由魔改，自动同步上游。*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue)]()
@@ -40,13 +40,14 @@ ResearchMate
 │   ├── 4 contexts                   research、training、review、dev
 │   └── settings.json.template       全局配置模板
 │
-├── third-party/ (git subtree)       <- 6 个精选工具，独立同步上游
+├── third-party/ (git subtree)       <- 7 个精选工具，独立同步上游
 │   ├── Auto-claude-code-research-in-sleep (ARIS)   27 skills · 3 MCP servers — AI 研究自动化
 │   ├── autoresearch (Karpathy)      program.md + train.py — 单 GPU 自主 ML 迭代
 │   ├── pi-autoresearch              1 skill · 1 extension — 通用自主优化循环
 │   ├── academic-research-skills     4 skills (13+12+7-agent) — 13-agent 文献 · 12-agent 写作
 │   ├── codex-plugin-cc              7 commands · 1 agent · 3 skills + hooks — OpenAI Codex 代码审查与任务委派
-│   └── claude-scientific-skills     175 skills · 250+ 数据源 — 科学数据库接入
+│   ├── claude-scientific-skills     175 skills · 250+ 数据源 — 科学数据库接入
+│   └── superpowers                  14 skills — 软件开发方法论（TDD、调试、协作）
 │
 ├── install.sh                       curl | bash 远程安装
 ├── setup.sh                         本地安装（幂等）
@@ -59,7 +60,7 @@ ResearchMate
 | 特性 | 说明 |
 |------|------|
 | **一键安装** | `curl` 一行，自动处理依赖、MCP 注册、Plugin 安装 |
-| **统一管理** | 你的配置 + 6 个精选第三方工具在一个仓库 |
+| **统一管理** | 你的配置 + 7 个精选第三方工具在一个仓库 |
 | **自动同步** | GitHub Actions 每周检查上游 + Claude Haiku 审核 + 自动合并 |
 | **自由魔改** | 直接编辑第三方代码，上游更新时 git subtree 自动合并 |
 | **研究者专属** | 覆盖论文写作、文献综述、实验管理、代码审查全流程 |
@@ -185,6 +186,11 @@ program.md + train.py。给 AI agent 一个 GPU，让它自主修改代码、训
 
 OpenAI 官方插件。7 个带 namespace 的命令（`/codex:review`、`/codex:adversarial-review`、`/codex:rescue`、`/codex:status`、`/codex:result`、`/codex:cancel`、`/codex:setup`）外加 `codex-rescue` 子代理。通过本地 Codex CLI 做代码审查与任务委派，支持后台作业和可选的审查门禁。需 `codex` CLI + ChatGPT/OpenAI 登录。
 
+### superpowers -- 软件开发方法论
+> [obra/superpowers](https://github.com/obra/superpowers) ![GitHub stars](https://img.shields.io/github/stars/obra/superpowers?style=flat-square)
+
+14 个可组合 skill，把一套有纪律的开发流程固化下来：brainstorming（苏格拉底式设计）、writing-plans（细化计划）、test-driven-development（RED-GREEN-REFACTOR）、systematic-debugging（4 阶段根因分析）、subagent-driven-development、代码审查、git worktree 管理。通用型，与上面的 ML/研究 skills 互补。注意：当前为 symlink 安装方式，自动触发的 bootstrap 未加载，按需手动调用即可。
+
 ## 功能目录
 
 安装后可用的所有功能，按用途分类：
@@ -272,7 +278,7 @@ OpenAI 官方插件。7 个带 namespace 的命令（`/codex:review`、`/codex:a
 
 | 类型 | 数量 | 来源分布 |
 |------|------|---------|
-| **Skills** | 230+ | config: 24, ARIS: 27, academic: 4, scientific: 175 |
+| **Skills** | 240+ | config: 24, ARIS: 27, academic: 4, scientific: 175, superpowers: 14 |
 | **Commands** | 30+ | config: 23, codex-plugin: 7 |
 | **Agents** | 7 | config: 7 |
 | **MCP Servers** | 3 | ARIS (Codex, LLM-chat, MiniMax) |
@@ -349,7 +355,7 @@ setup.sh 自动检测平台并给出安装提示。
 | 能力 | everything-claude-code | dot-claude | starter-kit | **ResearchMate** |
 |------|:---:|:---:|:---:|:---:|
 | 存自己的配置 | ~ | ✅ | ~ | ✅ |
-| 集成多个第三方工具 | ❌ | ❌ | ❌ | ✅ (6 个) |
+| 集成多个第三方工具 | ❌ | ❌ | ❌ | ✅ (7 个) |
 | 各工具独立上游同步 | ❌ | ❌ | ~ (仅一个) | ✅ |
 | 本地修改后仍可同步 | ❌ | N/A | ✅ | ✅ |
 | 一键新电脑部署 | ✅ | ✅ | ~ | ✅ |
@@ -380,3 +386,4 @@ setup.sh 自动检测平台并给出安装提示。
 - [codex-plugin-cc](https://github.com/openai/codex-plugin-cc) by [@openai](https://github.com/openai)
 - [academic-research-skills](https://github.com/Imbad0202/academic-research-skills) by [@Imbad0202](https://github.com/Imbad0202)
 - [claude-scientific-skills](https://github.com/K-Dense-AI/claude-scientific-skills) by [@K-Dense-AI](https://github.com/K-Dense-AI)
+- [superpowers](https://github.com/obra/superpowers) by [@obra](https://github.com/obra)

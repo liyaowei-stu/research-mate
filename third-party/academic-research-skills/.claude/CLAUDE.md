@@ -6,10 +6,19 @@ A suite of Claude Code skills for rigorous academic research, paper writing, pee
 
 | Skill | Purpose | Key Modes |
 |-------|---------|-----------|
-| `deep-research` v2.9.4 | 13-agent research team | full, quick, socratic, review, lit-review, fact-check, systematic-review |
-| `academic-paper` v3.2.0 | 12-agent paper writing | full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure |
+| `deep-research` v2.11.0 | 13-agent research team | full, quick, socratic, review, lit-review, three-way-scan, fact-check, systematic-review |
+| `academic-paper` v3.2.0 | 12-agent paper writing | full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure, rebuttal-audit |
 | `academic-paper-reviewer` v1.10.0 | Multi-perspective paper review (5 reviewers + optional cross-model DA critique) | full, re-review, quick, methodology-focus, guided, calibration |
-| `academic-pipeline` v3.12.0 | Full pipeline orchestrator | (coordinates all above) |
+| `academic-pipeline` v3.13.0 | Full pipeline orchestrator | (coordinates all above) |
+
+## v3.13 Key Additions (portability + verifier reach + guard correctness)
+
+- **Write-scope guard: `CLAUDE.md` dropped from infra-protected globs (#459).** Closes the residual half of #448/#449. Under the git-clone + symlink install layout `plugin_root` collapses onto `workspace_root`, so the bare `CLAUDE.md` / `.claude/CLAUDE.md` infra globs re-denied the user's own `CLAUDE.md`. `CLAUDE.md` is documentation, not a load-bearing enforcement file, so it is removed from the infra list; every load-bearing file (guard script, manifest, hooks, plugin metadata, agent frontmatter, lint) stays protected.
+- **Windows Python hook portability + graceful no-Python degradation (#454).** The PreToolUse write-scope guard is now launched via a cross-platform `hooks/run_guard.sh` that finds a real interpreter (rejecting the 0-byte Microsoft Store `python3` stub) and runs the guard as a time-bounded supervised subprocess; if no interpreter is found or the guard misbehaves, the launcher emits a valid pass-through and never spams the hook log.
+- **Provider-agnostic cross-model verification (#455).** The cross-model verification layer accepts OpenAI-compatible endpoints (MiMo, DeepSeek, self-hosted) alongside first-party OpenAI, with the grounded first-party path preserved and never silently downgraded.
+- **Opt-in Socratic adjacent-framing probe (#461; `deep-research` 2.10.0 → 2.11.0).** When `ARS_SOCRATIC_ADJACENT_PROBE=1`, the Socratic Mentor may surface ONE adjacent research framing as a pure question during exploratory Layer-1 framing (STORM-borrowed perspective expansion). Default OFF, prose-layer only, Kong L2 verb-test bounded.
+
+Spec: `docs/design/2026-06-16-448-infra-protection-plugin-root-scope-spec.md` (+ the #454/#453/adjacent-probe design docs).
 
 ## v3.12 Key Additions (Kong auto-research feature track + partial-evidence decomposition)
 
@@ -108,7 +117,7 @@ Spec: `docs/design/2026-05-17-ars-v3.9.0-cross-index-triangulation-measurement-s
 
 - **Claude Code plugin packaging**: ARS now installs in one line via `/plugin marketplace add Imbad0202/academic-research-skills` + `/plugin install academic-research-skills`. The traditional `git clone + symlink to ~/.claude/skills/` flow continues to work — both tracks are first-class. Repo gains four top-level directories: `.claude-plugin/`, `commands/`, `agents/`, `hooks/`, plus a `skills/` symlink dir; existing 4 skill directories untouched.
 - **10 slash commands** (`commands/ars-*.md`) mapping `MODE_REGISTRY.md` entries to `/ars-<mode>` triggers — `sonnet` pinned in frontmatter for the light modes (cost routing); the heavy modes (`full`, `reviewer`, `revision-coach`) inherit the session model (the original v3.7.0 `opus` floor was retired in the 2026-06 Fable 5 harness pass — under a stronger session model a floor becomes a downgrade ceiling), no Haiku.
-- **3 plugin-shipped agents** (`agents/*_agent.md`) as relative symlinks to the v3.6.7-hardened downstream agents in `deep-research/agents/`. Source frontmatter gains `model: inherit` so an Opus session keeps Opus agents while the user's PreToolUse `warn-agent-no-model.sh` hook gates Haiku at dispatch.
+- **3 plugin-shipped agents** (`agents/*_agent.md`) as relative symlinks to the v3.6.7-hardened downstream agents in `deep-research/agents/` (materialized to real byte-identical copies in #413 — symlinks break Windows checkouts and zip installs; `scripts/check_agents_mirror_sync.py` now pins the byte-equality in CI). Source frontmatter gains `model: inherit` so an Opus session keeps Opus agents while the user's PreToolUse `warn-agent-no-model.sh` hook gates Haiku at dispatch.
 - **SessionStart announce hook** (`hooks/hooks.json` + `scripts/announce-ars-loaded.sh`) lists the 10 slash commands + 3 agents + token-budget pointer when the plugin loads. Bash 3.2 compatible.
 - **Phase 2.2 scope reduction note**: a `SubagentStop → run_codex_audit.sh` cross-model audit hook was scoped out for v3.7.0 (contract gap: hook payload carries no stage/deliverable; invoker boundary: same-session in-LLM Bash forbidden by the wrapper). Deferred to a future release.
 
@@ -236,6 +245,8 @@ Otherwise, classify the user's input:
 
 5. **academic-paper-reviewer guided vs full**: guided = Socratic review that engages the author in dialogue about issues. full = standard multi-perspective review report. When the user wants to learn from the review, suggest guided mode.
 
+6. **rebuttal-audit vs revision-coach (input-shape gate)**: both touch reviewer comments, so route by INPUT SHAPE, not verbs. Route to `academic-paper rebuttal-audit` ONLY when the user supplies BOTH the reviewer comments AND an existing rebuttal/response draft to evaluate (it does advisory QA, generates nothing). If only reviewer comments are present (no draft yet), route to `revision-coach` (it generates a Response Letter Skeleton). If unclear which, clarify rather than guess. `rebuttal-audit` is standalone/advisory and never emits Schema 11 or marks anything verified.
+
 ## Key Rules
 
 - All claims must have citations
@@ -270,7 +281,7 @@ Materials: Complete paper text. field_analyst_agent auto-detects domain and conf
 Materials: Editorial Decision Letter, Revision Roadmap, Per-reviewer detailed comments
 
 ## Version Info
-- **Suite version**: 3.12.0 (per CHANGELOG.md)
-- **Last Updated**: 2026-06-08
+- **Suite version**: 3.13.0 (per CHANGELOG.md)
+- **Last Updated**: 2026-06-18
 - **Author**: Cheng-I Wu
 - **License**: CC-BY-NC 4.0

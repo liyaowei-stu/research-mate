@@ -180,7 +180,14 @@ Which ideas should I validate further? Or should I regenerate with different con
 ```
 
 - **User picks ideas** (or no response + AUTO_PROCEED=true) → proceed to Phase 3 with top-ranked ideas.
-- **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Repeat until the user selects at least 1 idea.
+- **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Before
+  regenerating, read the already-tried directions (research-wiki Failed Ideas + any
+  `.aris/runs/<run_id>.iterations.jsonl`) and forbid a candidate too close to one already
+  tried — enforced direction diversity; when an overnight heartbeat drives the run,
+  record each chosen direction via `iteration_log.py note ... --direction "<frame>"`
+  so later ticks can reject near-duplicates (see
+  [`shared-references/external-cadence.md`](../shared-references/external-cadence.md) →
+  Stall detection & forced structural pivot). Repeat until the user selects at least 1 idea.
 - **User wants to adjust scope** → go back to Phase 1 with refined direction.
 
 ### Phase 3: Deep Novelty Verification
@@ -313,6 +320,20 @@ Write `idea-stage/IDEA_CANDIDATES.md` — a lean summary of the top 3-5 survivin
 ```
 
 This file is intentionally small (~30 lines) so downstream skills and session recovery can read it without loading the full `idea-stage/IDEA_REPORT.md` (~200+ lines).
+
+### Phase 5.6: Instantiate the Research Contract (always — NOT gated on COMPACT)
+
+When Phase 4 ends with a RECOMMENDED idea, create `idea-stage/docs/research_contract.md`
+from `templates/RESEARCH_CONTRACT_TEMPLATE.md` (resolve the template from the repo
+root or `$ARIS_REPO/templates/`), filling in: the selected idea + selection
+rationale, core claims, minimum convincing evidence, and the next-step pointer.
+Skip only when the run produced no RECOMMENDED idea.
+
+This file is the **focused working contract** for the W1 → W1.5 handoff:
+`/experiment-bridge` implements against it, and `/result-to-claim` +
+`/ablation-planner` read it as the claims source. It is also the #2
+session-recovery file (`docs/SESSION_RECOVERY_GUIDE.md`) — a crashed session
+reloads the ACTIVE idea from this contract instead of the full idea pool.
 
 ## Output Protocols
 

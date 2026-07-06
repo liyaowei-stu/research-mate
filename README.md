@@ -1,10 +1,11 @@
 # Academic Research Skills for Claude Code
 
-[![Version](https://img.shields.io/badge/version-v3.12.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.12.0)
+[![Version](https://img.shields.io/badge/version-v3.15.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.15.0)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20696614-blue)](https://doi.org/10.5281/zenodo.20696614)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Sponsor](https://img.shields.io/badge/sponsor-Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/crucify020v)
 
-[简体中文版](README.zh-CN.md) | [繁體中文版](README.zh-TW.md) | [日本語版](README.ja-JP.md)
+[简体中文版](README.zh-CN.md) | [繁體中文版](README.zh-TW.md) | [日本語版](README.ja-JP.md) | [한국어](README.ko-KR.md)
 
 A comprehensive suite of Claude Code skills for academic research, covering the full pipeline from research to publication.
 
@@ -48,6 +49,7 @@ The architecture doc supersedes the sprawling pipeline description that used to 
 - [Claude Code](https://docs.claude.com/en/docs/claude-code/setup) (latest; plugin packaging requires recent versions)
 - `ANTHROPIC_API_KEY` exported, or set on first `claude` run
 - *Optional:* Pandoc for DOCX, tectonic + Source Han Serif TC for APA 7.0 PDF (Markdown output works without either)
+- *Optional (real Python):* The core skills (research / write / review) need no Python — they are prompt-driven. A **real Python interpreter** is needed only for: the `PreToolUse` write-scope guard (optional subagent hardening — if no real Python is found it cleanly no-ops and the guard is simply inactive; core skills are unaffected), plus a few opt-in features that shell out to Python (revision-patch mode, the submission-package verifier, and the `/ars-cache-invalidate` / `/ars-mark-read` / `/ars-unmark-read` commands). On Windows, note that `python3` is often a non-functional Microsoft Store placeholder rather than real Python; install Python from python.org (or via `winget`) so the launcher can find a real interpreter. The guard launcher is a POSIX shell script and `hooks.json` invokes it through `bash`, so on Windows it needs **Git Bash** (bundled with Git for Windows). With Git Bash present, a missing real Python degrades cleanly (the guard no-ops, silently). Without Git Bash, Claude Code falls back to PowerShell, which cannot run the `.sh` launcher at all: the guard is inactive and the `PreToolUse` hook will log an error per call rather than no-op quietly (accepted degradation — the guard is optional and never blocks your writes, but the hook noise is the trade-off until Git Bash is installed).
 
 **Plugin install (v3.7.0+, recommended):**
 
@@ -58,13 +60,15 @@ The architecture doc supersedes the sprawling pipeline description that used to 
 
 **Verify it works:** run `/ars-plan` and describe a paper you're working on — ARS will start a Socratic dialogue to map out chapter structure. For a single-shot test instead, try `/ars-lit-review "your topic"`.
 
-**👉 [docs/SETUP.md](docs/SETUP.md)** — full guide: install Claude Code, set up API keys, optional Pandoc/tectonic for DOCX/PDF, cross-model verification (`ARS_CROSS_MODEL`), and five installation methods (Plugin, project skills, global skills, claude.ai Project, repo-cloned).
+**👉 [docs/SETUP.md](docs/SETUP.md)** — full guide: install Claude Code, set up API keys, optional Pandoc/tectonic for DOCX/PDF, cross-model verification (`ARS_CROSS_MODEL`), and six installation methods (Plugin, project skills, global skills, claude.ai Project, repo-cloned, Claude Science import).
+
+**Using Claude Science?** The four skills import directly: **Skills → Import from GitHub**, paste `https://github.com/Imbad0202/academic-research-skills`, **Preview**, then **Import 4 skills** (requires v3.14.0+ of this repo — the importer reads the explicit skill paths in the marketplace manifest). Imports are point-in-time snapshots: re-import after ARS updates. Imported skills carry the ARS methodology (research / writing / review protocols); Claude Code-specific machinery — slash commands, hooks, subagent orchestration — does not transfer. See [docs/SETUP.md](docs/SETUP.md) Method 5 for details.
 
 **Using Codex CLI?** Install the sibling distribution instead: [`Imbad0202/academic-research-skills-codex`](https://github.com/Imbad0202/academic-research-skills-codex) — same workflow content, Codex-native packaging as a single `$academic-research-suite` skill with `ars-*` aliases.
 
 ## Performance & cost
 
-**👉 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)** — per-mode token budgets, full-pipeline estimate (~$4–6 for a 15k-word paper), and recommended Claude Code settings (Skip Permissions; Agent Team optional).
+**👉 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)** — per-mode token budgets, full-pipeline estimate (~$4–6 for a 15k-word paper), and recommended Claude Code settings (Auto mode; Agent Team optional).
 
 ## Guides & articles
 
@@ -125,6 +129,8 @@ ARS Stage 2 WRITE     →  write paper with verified experiment results
 
 **Stage 1 intake declaration (#260)**: at Stage 1, ARS detects whether the run will carry experiment-backed claims and sets a fail-closed `experiment_intake_declaration` on the Material Passport. If you ran experiments externally, the scholar enters one `experiment_provenance[]` entry per experiment (`experiment_id`, nested `repro_lock`, `planned_vs_executed[]`, `negative_results[]`, `known_limitations[]`) and the declaration is set to `experiments_declared`; if not, it is set to `no_experiments_declared`. The declaration is **required on every post-#260 passport** — a run that touches no experiments still declares `no_experiments_declared`, so the integrity gate can never be silently bypassed by a forgotten provenance block. The `experiment_id`s are frozen at this intake point; the writers later reference them via `planned_experiment_ids[]`.
 
+**Teaching-side companion**: [Teaching Skills](https://github.com/YujxZJCN/teaching-skills) applies the ARS architecture (skill ensembles, shared contracts, staged gates, a Course Passport) to the teaching side of academic life — course design → lessons → assessment → delivery → reflection; its `sotl` mode hands classroom-inquiry projects off to ARS deep-research / academic-paper for the publication phase.
+
 ---
 
 ## Usage
@@ -150,7 +156,7 @@ You: "status"
 
 ### Individual Skills
 
-#### Deep Research (7 modes)
+#### Deep Research (8 modes)
 
 ```
 "Research the impact of AI on higher education"       → full mode
@@ -159,10 +165,11 @@ You: "status"
 "Guide my research on X"                              → socratic mode (guided)
 "Fact-check these claims"                             → fact-check mode
 "Do a literature review on X"                         → lit-review mode
+"Compare these papers in WHY/HOW/WHAT format"         → three-way-scan mode
 "Review this paper's research quality"                → review mode
 ```
 
-#### Academic Paper (10 modes)
+#### Academic Paper (11 modes)
 
 ```
 "Write a paper on X"                                  → full mode
@@ -175,6 +182,7 @@ You: "status"
 "Convert to LaTeX" / "Convert citations to IEEE"      → format-convert mode
 "Check citations"                                     → citation-check mode
 "Generate an AI disclosure statement for NeurIPS"     → disclosure mode
+"Audit my rebuttal draft against the reviews"         → rebuttal-audit mode
 ```
 
 #### Academic Paper Reviewer (6 modes)
@@ -231,19 +239,19 @@ You: "status"
 
 Per-agent responsibilities and per-stage artifacts now live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Version numbers are anchored here so release metadata stays in one place.
 
-### Deep Research (v2.9.4)
+### Deep Research (v2.11.0)
 
-13-agent research team. Modes: full, quick, review, lit-review, fact-check, socratic, systematic-review. Full agent roster and artifacts: see ARCHITECTURE.md §3.
+13-agent research team. Modes: full, quick, review, lit-review, three-way-scan, fact-check, socratic, systematic-review. Full agent roster and artifacts: see ARCHITECTURE.md §3.
 
 ### Academic Paper (v3.2.0)
 
-12-agent paper writing pipeline. Modes: full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure. Output: MD + DOCX (via Pandoc when available) + LaTeX (APA 7.0 `apa7` class / IEEE / Chicago) → PDF via tectonic. Full agent roster and per-phase responsibilities: see ARCHITECTURE.md §3.
+12-agent paper writing pipeline. Modes: full, plan, outline-only, revision, revision-coach, abstract-only, lit-review, format-convert, citation-check, disclosure, rebuttal-audit. Output: MD + DOCX (via Pandoc when available) + LaTeX (APA 7.0 `apa7` class / IEEE / Chicago) → PDF via tectonic. Full agent roster and per-phase responsibilities: see ARCHITECTURE.md §3.
 
 ### Academic Paper Reviewer (v1.10.0)
 
 7-agent multi-perspective review with **0-100 quality rubrics**. Modes: full, re-review, quick, methodology-focus, guided, calibration. **Decision mapping:** ≥80 Accept, 65-79 Minor Revision, 50-64 Major Revision, <50 Reject. First-round review team vs. narrow re-review team boundary: see ARCHITECTURE.md §3 Stage 3 / Stage 3'.
 
-### Academic Pipeline (v3.12.0)
+### Academic Pipeline (v3.15.0)
 
 10-stage orchestrator with integrity verification, two-stage review, Socratic coaching, and collaboration evaluation. Pipeline guarantees: every stage requires user confirmation checkpoint; integrity verification (Stage 2.5 + 4.5) cannot be skipped; R&R Traceability Matrix (Schema 11) independently verifies author revision claims. v3.4 added the Compliance Agent (PRISMA-trAIce + RAISE) at Stage 2.5 / 4.5. v3.5 adds the **Collaboration Depth Observer** (`collaboration_depth_agent`, advisory only — never blocks) at every FULL/SLIM checkpoint and at pipeline completion. MANDATORY integrity gates (2.5 / 4.5) explicitly skip the observer so compliance checks are not diluted. Based on Wang & Zhang (2026), IJETHE 23:11. Stage-by-stage matrix with agents, artifacts, and gates: see ARCHITECTURE.md §3.
 
@@ -322,9 +330,29 @@ https://github.com/Imbad0202/academic-research-skills
 
 **[xpfo-go](https://github.com/xpfo-go)** (xpfo) — Contributor. Translated the Simplified Chinese README ([`README.zh-CN.md`](README.zh-CN.md)) ([PR #181](https://github.com/Imbad0202/academic-research-skills/pull/181)).
 
+**[devCharlotte](https://github.com/devCharlotte)** — Contributor. Translated the Korean README ([`README.ko-KR.md`](README.ko-KR.md)) ([PR #469](https://github.com/Imbad0202/academic-research-skills/pull/469)).
+
+**[Yaobin29](https://github.com/Yaobin29)** — Contributor. Proposed reviewer-response tooling in [PR #433](https://github.com/Imbad0202/academic-research-skills/pull/433); the `deep-research three-way-scan` mode and the `academic-paper rebuttal-audit` mode (rescued from the PR's `audit` concept) were integrated from that contribution in v3.12.1.
+
 ---
 
 ## Changelog
+
+### v3.15.0 (2026-07-04) — Release-gate hardening, prompt-debt retirement round 2, defrift locks
+
+> A release-discipline-and-hygiene release; no skill-behavior changes. **Added:** three CI gates — the CHANGELOG-covers-merges pre-tag gate (#483), version-consistency invariants 9-11 plus a tag-time re-run gate (#487), and a command-invariants gate pinning the SessionStart announce list to the actual 16-command inventory (#486) — plus two defrift locks: the Phase Boundary enforcement sentence is pinned verbatim across all 23 Bucket A agent blocks, and the SETUP cross-model examples are pinned to each other and to the canonical model tables (#491 → #492). **Changed:** prompt-debt retirement round 2 deep-scans the 17 agents the first pass deferred (#489 → #490): two live self-contradictions fixed in both socratic_mentor agents (stale 15-round quit rules vs the documented typical 20-30-round run), the repo-wide stale enforcement-status sentence corrected at 29 surfaces, few-shot and duplicated-process scaffolds trimmed across 7 agents — verified by a 4-batch parallel audit + independent codex cross-model challenge; audit report under `audits/`. **Fixed:** DOI badge served from shields.io (#482). `academic-pipeline` tracks the suite at v3.15.0; the other three skill versions are unchanged.
+
+### v3.14.0 (2026-07-02) — Claude Science importability, eval-comment rendering, prompt-debt retirement
+
+> A portability-and-polish release; no skill-behavior changes. **Added:** Claude Science importability — the marketplace manifest declares explicit skill paths, so GitHub-API importers that cannot traverse the symlinked `skills/` directory (Claude Science "Import from GitHub", Windows checkouts) now find all four skills; verified end-to-end on Claude Science, with an import guide in README + SETUP (#480). Eval-harness PR comments render as a one-line verdict + per-task table with the raw JSON folded into `<details>`, replacing the raw report dump — display layer only, gate logic byte-identical (#479). **Changed:** expired writing-harness scaffolds retired from four writer-surface agents after the 2026-07 harness-retirement audit (#476/#477 → #478, net −111 prompt lines); a remind-don't-block Platform Port Reminder surfaces the platform-ports policy when a PR adds a new top-level directory (#473). **Docs:** native-reviewed Korean README by devCharlotte (#469/#471); GitHub Copilot repository instructions (#465); auto permission mode recommended over Skip Permissions (#464). The accumulated `[Unreleased]` backlog (16 entries whose code shipped before the v3.13.0 tag — diff/patch revision mode #390, submission-package verifier #394, eval gold sets #215/#216, and more) is rolled into the versioned record; see `CHANGELOG.md`. `academic-pipeline` tracks the suite at v3.14.0; the other three skill versions are unchanged.
+
+### v3.13.0 (2026-06-18) — Hook portability, provider-agnostic verification, guard correctness
+
+> A minor release hardening the install/runtime surface and extending cross-model reach. **Fixes:** the write-scope guard no longer false-denies a user's own `CLAUDE.md` under the git-clone + symlink install layout (#459, closing the residual half of #448/#449 — `CLAUDE.md` is documentation, not a load-bearing enforcement file, so it leaves the infra-protected list while every load-bearing file stays protected); Windows Python hook portability + graceful no-Python degradation via a cross-platform `hooks/run_guard.sh` launcher that rejects the 0-byte Microsoft Store `python3` stub and never spams the hook log (#454); `draft_writer` dual-phase static union documented + POSIX-safe Windows path matching (#451). **Added:** provider-agnostic cross-model verification accepting OpenAI-compatible endpoints (MiMo, DeepSeek, self-hosted) alongside grounded first-party OpenAI, which is never silently downgraded (#455); an opt-in Socratic adjacent-framing probe (STORM-borrowed perspective expansion, `ARS_SOCRATIC_ADJACENT_PROBE=1`, default OFF, prose-layer only — `deep-research` 2.10.0 → 2.11.0) (#461). `academic-pipeline` tracks the suite at v3.13.0; `academic-paper` and `academic-paper-reviewer` are unchanged. See `CHANGELOG.md` for the per-issue detail.
+
+### v3.12.1 (2026-06-15) — Reviewer-response triage modes (PR #433 integration)
+
+> A patch release folding the genuinely-novel parts of an external contribution into existing skills as modes, per ARS's mode-based architecture. **New modes:** `deep-research` `three-way-scan` — a lightweight WHY/HOW/WHAT paper-comparison triage between `quick` and `lit-review`, with per-paper shortlists + a cross-paper synthesis (`deep-research` 2.9.4 → 2.10.0); `academic-paper` `rebuttal-audit` — standalone advisory QA of an author's existing rebuttal/response draft against the reviewer comments (per-comment coverage table + gap list + tone/evidence/misread risk flags), which generates nothing and explicitly suppresses Schema 11 / Material Passport writes / `ready_to_submit` when run standalone (enforced by a `check_rebuttal_audit_guard()` lint with mutation coverage); plus a `revision-coach` scope extension to pushback/disagreement posture and non-journal scopes, and `/ars-3w` + `/ars-rebuttal-audit` slash commands. Routed by input shape: reviewer comments AND a draft → `rebuttal-audit`; comments only → `revision-coach`. Integrated from [@Yaobin29](https://github.com/Yaobin29)'s [PR #433](https://github.com/Imbad0202/academic-research-skills/pull/433). Suite mode count 25 → 27 (still 4 skills). See `CHANGELOG.md` for the per-issue detail.
 
 ### v3.12.0 (2026-06-08) — Kong auto-research feature track: experiment provenance, figure fidelity, cross-paper contradiction, partial-evidence decomposition
 
@@ -401,7 +429,7 @@ https://github.com/Imbad0202/academic-research-skills
 
 - **Plugin manifest + marketplace metadata** (Phase 1, PR #68). `.claude-plugin/plugin.json` declares the suite (4 skills auto-discovered from `skills/` directory via relative symlinks). `.claude-plugin/marketplace.json` registers the plugin so a single GitHub-hosted endpoint serves both the marketplace listing and the plugin source. README + `README.zh-TW.md` + `docs/SETUP.md` carry dual-track install instructions.
 - **10 slash commands** at `commands/ars-*.md` (Phase 2.1, PR #69) mapping `MODE_REGISTRY.md` entries to `/ars-<mode>` triggers. Model routing is pinned in each command's frontmatter — `opus` for `full` and `revision-coach` (architectural / review-interpretation depth), `sonnet` for the other 8. No Haiku per project policy.
-- **3 plugin-shipped agents** at `agents/*_agent.md` (Phase 2.1, PR #69) as relative symlinks to the v3.6.7-hardened downstream agents in `deep-research/agents/`: `synthesis_agent`, `research_architect_agent`, `report_compiler_agent`. Underscore filenames preserved to keep `scripts/check_v3_6_7_pattern_protection.py` hard-pinned paths and INV-3 manifest-confined Clause 1 invariant intact. Symlinks (not copies) preserve a single source of truth and prevent the Pattern C3 attack surface that v3.6.7 §6 inversion sweep + INV-1/2/3 lint closes.
+- **3 plugin-shipped agents** at `agents/*_agent.md` (Phase 2.1, PR #69) as relative symlinks to the v3.6.7-hardened downstream agents in `deep-research/agents/`: `synthesis_agent`, `research_architect_agent`, `report_compiler_agent`. Underscore filenames preserved to keep `scripts/check_v3_6_7_pattern_protection.py` hard-pinned paths and INV-3 manifest-confined Clause 1 invariant intact. Symlinks (not copies) preserve a single source of truth and prevent the Pattern C3 attack surface that v3.6.7 §6 inversion sweep + INV-1/2/3 lint closes. (Materialized to real byte-identical copies in #413 — relative symlinks break Windows checkouts without `core.symlinks` and zip-download installs; the single-source guarantee moved to the `scripts/check_agents_mirror_sync.py` byte-equality CI lint.)
 - **`model: inherit`** added to those three source agent frontmatters. Inherit chosen over pinning `sonnet` so an opus session running ARS full pipeline keeps opus agents (instead of being capped). The user's `~/.claude/hooks/warn-agent-no-model.sh` PreToolUse hook gates Haiku at the dispatching boundary, so `inherit` resolves through an already-Haiku-free model.
 - **SessionStart announce hook** at `hooks/hooks.json` + `scripts/announce-ars-loaded.sh` (Phase 2.2, PR #70). When the plugin loads, the hook injects an `additionalContext` listing the 10 slash commands, the 3 plugin agents, and a token-budget pointer into the LLM's first turn. `startup` and `clear` source values get the full announce; `resume` and `compact` get a one-line ack to avoid burning context. Bash 3.2 compatible — runs on macOS stock `/bin/bash` with no `brew install bash` requirement.
 - **Phase 2.2 scope reduction**: a `SubagentStop → run_codex_audit.sh` codex audit hook was scoped out for v3.7.0 due to a contract gap (the SubagentStop payload carries no stage/deliverable info, so the wrapper would have to half-infer required arguments) and an invoker-class boundary (`run_codex_audit.sh` lines 4–7 forbid same-session in-LLM invocation; PostToolUse fires inside the producing session). Real audit-hook integration deferred to a future release when ARS gains a stage/deliverable propagation contract. See `docs/design/2026-04-30-ars-v3.7.0-plugin-packaging-roadmap.md` Update note 2026-05-05 (Phase 2.2 scope reduction).

@@ -30,7 +30,7 @@ You MAY READ the paper draft and all provided artifacts for legitimate stress-te
 
 If synthesis-side work is needed, return control to `editorial_synthesizer_agent`.
 
-**Enforcement (v3.9.2):** prompt-level only. Advisory verifier (`scripts/check_pipeline_integrity.py`) can detect violations post-hoc. Deterministic PreToolUse hook deferred to v3.10 active conductor (#134). The v3.6.2 Sprint Contract Protocol below + the Role Boundaries (DA vs Other Reviewers) section + the disambiguation section (vs deep-research DA) all ALSO apply.
+**Enforcement (v3.9.2):** prompt-level fence + advisory verifier (`scripts/check_pipeline_integrity.py`). Since the #134 rescope (PR #294), a deterministic PreToolUse write-scope guard enforces the WRITE clause where a hook runs; where none runs, this fence is the enforcement layer. The v3.6.2 Sprint Contract Protocol below + the Role Boundaries (DA vs Other Reviewers) section + the disambiguation section (vs deep-research DA) all ALSO apply.
 
 ---
 
@@ -345,7 +345,7 @@ When receiving a rebuttal to one of your findings, assess it in this order:
 
 ### Cross-Model DA (Optional, v3.0)
 
-When `ARS_CROSS_MODEL` is set, do not send the paper automatically. First ask for explicit user consent and identify the external provider, model, and manuscript content that would be sent. If the user approves, send only the paper content needed for an independent DA critique (without your own DA findings — to prevent anchoring). Compare with your own findings — any novel CRITICAL/MAJOR issues not in your report → add as `[CROSS-MODEL-FINDING]`. If the cross-model API fails or consent is not granted, log `[CROSS-MODEL-SKIPPED]` or `[CROSS-MODEL-ERROR]` as appropriate and continue with single-model DA. See `shared/cross_model_verification.md` for setup and API patterns. When not set, standard single-model review operates unchanged.
+When `ARS_CROSS_MODEL` is set, do not send the paper automatically. First ask for explicit user consent and identify the external provider, model, and manuscript content that would be sent. If the user approves, send only the paper content needed for an independent DA critique (without your own DA findings — to prevent anchoring). Transport follows the #523 ownership rule: you are a fenced single-phase (Bucket A) agent with all Bash denied at runtime, so when you run as a dispatched subagent you emit the sanitized payload as a cross-model handoff block and the dispatching layer executes the API call (see `shared/cross_model_verification.md` § Blind Disagreement Checkpoints → Transport ownership); executing inline in a shell-capable context, that context runs the call directly. Unlike the enum checkpoints, this call has no mechanical comparison the dispatcher could apply — so on every successful response the dispatching layer re-invokes you with the cross-model's critique, and the findings comparison below is yours. Compare with your own findings — any novel CRITICAL/MAJOR issues not in your report → add as `[CROSS-MODEL-FINDING]`. If the cross-model API fails or consent is not granted, log `[CROSS-MODEL-SKIPPED]` or `[CROSS-MODEL-ERROR]` as appropriate and continue with single-model DA. See `shared/cross_model_verification.md` for setup and API patterns. When not set, standard single-model review operates unchanged.
 
 ### Frame-Lock Detection
 

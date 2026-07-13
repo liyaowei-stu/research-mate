@@ -1,6 +1,6 @@
 # ARS 安裝設定
 
-Academic Research Skills 的前置需求與選用設定。只需要 Markdown 輸出與預設 Claude Opus 4.8 pipeline 的人，大部分內容可以略過。請見下方「最小可行設定」。
+Academic Research Skills 的前置需求與選用設定。只需要 Markdown 輸出與預設 Claude pipeline（繼承 session 模型）的人，大部分內容可以略過。請見下方「最小可行設定」。
 
 ---
 
@@ -125,6 +125,7 @@ ARS 暴露若干 opt-in flag，全部預設 OFF；設定後僅影響當前 sessi
 | `ARS_PASSPORT_RESET=1` | v3.6.3 | 把每個 FULL checkpoint 提升為 context 重置邊界。**emit** boundary entry 必須設此 flag；新 session 用 `resume_from_passport=<hash>` 續跑**不需要** flag。`systematic-review` 模式下 flag ON 時，每個 FULL checkpoint 一律強制重置。 | `academic-pipeline/references/passport_as_reset_boundary.md` |
 | `ARS_CROSS_MODEL_SAMPLE_INTERVAL` | v3.5.0 | 跨模型完整性抽查的取樣間隔（advisory） | `shared/cross_model_verification.md` |
 | `ARS_VERIFICATION_CACHE_PATH` | v3.11 | 覆寫引用查驗 cache 的位置（見下節）。不是 on/off flag——cache 預設開啟，此變數只改位置。 | `scripts/verification_cache.py` |
+| `ARS_MODEL_TIERING` | Unreleased (#517) | Opt-in 模型分層：`economy`（frontier session——execution 型 agent 降一階，樓地板 Opus 級）或 `quality-boost`（低於 frontier 的 session——judgment 型 agent 在檢查點表面跳升到 frontier 級：Stage 2.5/4.5 關卡、opt-in 的 Stage 4→5 claim–ref audit、最終審查）。未設定 = 全部用 session model；未知值警告一次後視同未設定。 | `shared/model_tiering.md` |
 
 ---
 
@@ -142,18 +143,22 @@ Cache 為單一 process（SQLite WAL）；多使用者共用同一 cache 檔案�
 
 ## 跨模型驗證（選用）
 
-ARS 使用 Claude Opus 4.8 即可完整運作。想要更高信心，可選擇啟用第二 AI 模型來獨立驗證完整性檢查，並挑戰魔鬼代言人。
+ARS 使用繼承的 Claude session 模型即可完整運作。想要更高信心，可選擇啟用第二 AI 模型來獨立驗證完整性檢查，並挑戰魔鬼代言人。
 
 ### 快速設定
 
 ```bash
 # Step 1: Set your API key (choose one or both)
-export OPENAI_API_KEY="sk-your-key-here"        # For GPT-5.4 Pro
+export OPENAI_API_KEY="sk-your-key-here"        # For GPT-5.5 / GPT-5.5 Pro
 export GOOGLE_AI_API_KEY="AIza-your-key-here"    # For Gemini 3.1 Pro
 
 # Step 2: Choose your cross-verification model
-export ARS_CROSS_MODEL="gpt-5.4-pro"            # Best reasoning
+export ARS_CROSS_MODEL="gpt-5.5"                # Recommended pair (gpt-5.5-pro = strongest reasoning, ~6x cost)
 # or: export ARS_CROSS_MODEL="gemini-3.1-pro-preview"  # Strong at factual verification
+# or: export ARS_CROSS_MODEL="gpt-5.6-sol"      # Frontier, provisional pending ARS validation (same rates as gpt-5.5)
+
+# Optional: reasoning effort for OpenAI verifier calls (unset = provider default)
+# export ARS_CROSS_MODEL_REASONING_EFFORT="medium"
 
 # Step 3: Run Claude Code as normal — cross-verification activates automatically
 claude
@@ -163,13 +168,14 @@ claude
 
 | 功能 | 未啟用跨模型 | 啟用跨模型 |
 |---|---|---|
-| 完整性驗證 | 單模型 100% 檢查 | + 30% 樣本由第二模型獨立驗證 |
+| 完整性驗證 | 單模型 100% 檢查 | + 第二模型風險分層驗證：高影響引用 100%（最終關卡再加新增/變更主張的引用 100%）+ 其餘抽樣 |
 | 魔鬼代言人 | 單模型 DA | + 跨模型產生獨立 critique，新發現自動加入 |
 | 同儕審查 | 5 位審稿人（同模型） | 同樣 5 位審稿人 + 跨模型 DA critique / calibration 支援 |
+| 不可逆檢查點 | 單模型決策 | + 設計凍結與最終編輯決定各加一次盲判跨模型決策；分歧上報給你，絕不平均 |
 
 ### 費用
 
-完整 pipeline 會增加約 $0.60-1.10 的跨模型 API 費用（GPT-5.4 Pro 定價）。詳細拆解見 [`shared/cross_model_verification.md`](../shared/cross_model_verification.md)。
+完整 pipeline 會增加約 $0.60-1.10 的跨模型 API 費用（數量級估計；以 GPT-5.4 Pro 定價量測）。現行模型陣容與詳細拆解見 [`shared/cross_model_verification.md`](../shared/cross_model_verification.md)。
 
 ### 沒有 API key？沒問題
 
@@ -407,3 +413,17 @@ zip -r academic-pipeline.zip academic-pipeline
 - claude.ai 不支援本機 shell commands；結果可能不如依賴本機 scripts 的 Claude Code workflows 完整。
 - 跨模型驗證（`ARS_CROSS_MODEL`）需要 Claude Code 與 API keys。
 - 直接產出 `.docx` 需要 Pandoc，LaTeX/PDF 輸出需要 Claude Code 搭配 `tectonic`；claude.ai 仍可產出 Markdown 與 DOCX 轉換說明。
+### 方法五：Claude Science 匯入（v3.14.0+）
+
+Claude Science 可直接從 GitHub 匯入四個 ARS skill：
+
+1. 開啟 **Customize → Capabilities → Skills → Import from GitHub**。
+2. 貼上 `https://github.com/Imbad0202/academic-research-skills`，按 **Preview**。
+3. 四個 skill（`academic-paper`、`academic-paper-reviewer`、`academic-pipeline`、`deep-research`）全部出現——按 **Import 4 skills**。
+
+**注意事項：**
+
+- 需要 repo 狀態為 v3.14.0+——匯入器讀取 `.claude-plugin/marketplace.json` 中明列的 skill 路徑。更早的 tag 只透過 symlink 的 `skills/` 目錄暴露 skill，GitHub-API 匯入器無法穿越（會回報「no skills/ dirs with SKILL.md」）。
+- 匯入是**單次快照**：Claude Science 不會追蹤 repo。ARS 發版後需重新匯入才能取得更新。
+- **會轉移的**：方法論層——各 skill 的 `SKILL.md` 與其協定（研究／寫作／審查），Claude Science 的 agent 會在相關時讀取。
+- **不會轉移的**：Claude Code 專屬機制——`/ars-*` slash commands、hooks（含 write-scope guard）、跨模型驗證 scripts、Task-tool subagent 編排。Claude Science 有自己的 specialist agent 系統與內建引用查核 reviewer；把 Claude Science 上的執行視為「ARS 方法論 + Claude Science 自家機制」，而非 1:1 的 pipeline 移植。

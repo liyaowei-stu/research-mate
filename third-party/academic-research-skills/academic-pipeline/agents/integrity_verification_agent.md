@@ -612,18 +612,20 @@ The following patterns are PROHIBITED in integrity reports:
 
 ## Issue List (Sorted by Severity)
 
+**Correction item IDs.** Every row carries a stable `ID` of the form `IL-<SEVERITY>-<n>` (`IL-SERIOUS-1`, `IL-MEDIUM-2`, `IL-MINOR-1`) — severity prefix + the row's `#` within its bucket. The `#` repeats across buckets, so the severity prefix is the disambiguator; the ID is what a downstream patch round copies into `roadmap_item_ids` for traceability (#89 Item 8). The ID is stable for the lifetime of THIS report (a re-verification after corrections produces a new report with its own freshly-numbered IDs — never reuse an old report's IDs against a new draft). Findings that already carry their own stable ID elsewhere in the passport — `experiment_alignment_results[]` rows (`EA-NNN`) — are referenced by that native ID, not re-wrapped in an `IL-` ID.
+
 ### SERIOUS (Must Fix)
-| # | Category | Location | Issue Description | Correct Information | Source |
-|---|----------|----------|------------------|--------------------|----|
-| 1 | Reference | §References | [description] | [correct value] | [verification source URL] |
+| ID | # | Category | Location | Issue Description | Correct Information | Source |
+|----|---|----------|----------|------------------|--------------------|----|
+| IL-SERIOUS-1 | 1 | Reference | §References | [description] | [correct value] | [verification source URL] |
 
 ### MEDIUM (Must Fix)
-| # | Category | Location | Issue Description | Correct Information | Source |
-|---|----------|----------|------------------|--------------------|----|
+| ID | # | Category | Location | Issue Description | Correct Information | Source |
+|----|---|----------|----------|------------------|--------------------|----|
 
 ### MINOR (Recommended Fix)
-| # | Category | Location | Issue Description | Suggestion |
-|---|----------|----------|------------------|----|
+| ID | # | Category | Location | Issue Description | Suggestion |
+|----|---|----------|----------|------------------|----|
 
 ## Tool Limitation Disclaimer
 
@@ -663,12 +665,16 @@ When the environment variable `ARS_CROSS_MODEL` is set, this agent enables cross
 **Consent gate (required before any upload):** When `ARS_CROSS_MODEL` is set, do not send the sampled references automatically. First ask for explicit user consent (if not already granted in this session) and identify the external provider, model, and content class (citation/reference metadata drawn from the user's manuscript) that would be sent. If consent is not granted, log `[CROSS-MODEL-SKIPPED]` and continue with single-model verification. The environment variable alone is not consent to upload user-derived material. See `shared/cross_model_verification.md` for the consent boundary.
 
 **Summary of behavior when enabled (and consent granted):**
-- After Phase A completes, randomly sample 30% of references (min 5, max 15; if total < 5, sample all)
+- After Phase A completes, select references by **risk stratification** (#518; replaces the pre-#518 uniform random 30%). Four tiers; a reference qualifying for more than one gets the highest tier that applies (`HIGH-IMPACT` > `NEW-CHANGED` > `CONTROL`/`RANDOM`) and is verified once:
+  - **HIGH-IMPACT — verify 100%, no cap (both gates):** every reference supporting a headline conclusion, a numerical claim, a causal claim, a methods-critical claim, or a disputed claim (contradiction disclosure / reviewer split). Classify at selection time and record the tier per reference.
+  - **RANDOM (Stage 2.5 only) — the non-high-impact remainder:** 10% sample, rounded up (min 3, max 10; if the remainder < 3, sample all of it).
+  - **NEW-CHANGED (Stage 4.5 only) — verify 100%, no cap:** every reference supporting a claim that is new or changed since Stage 2.5, whatever its impact class.
+  - **CONTROL (Stage 4.5 only) — the unchanged, non-high-impact remainder:** 10% sample, rounded up (min 3, max 10; fewer than 3 → all) to catch silent drift. CONTROL replaces RANDOM at the final gate.
 - Send **one API call per reference** (not a batch) to the cross-model for independent verification — the cross-model does NOT see Claude's result, and the call patterns enable the provider's web-search/grounding tool so "search the web to confirm" is actually executable
 - Each cross-model verdict is one of `VERIFIED` / `MISMATCH` / `NOT_FOUND` / `NOT_SEARCHED`. A `VERIFIED` with no supporting source URL/DOI, or a **successful (2xx)** response that carries no grounding evidence, is treated as `NOT_SEARCHED` (a non-2xx response is a transport error, not `NOT_SEARCHED` — see Graceful degradation)
 - Disagreements (Claude `VERIFIED` vs cross-model `NOT_FOUND` / `MISMATCH`) → `[CROSS-MODEL-DISAGREEMENT]` → prioritized for human review
 - `NOT_SEARCHED` / ungrounded results **never count as agreement** with a Claude `VERIFIED`: count them separately and surface them for re-run or human review — an ungrounded cross-model verdict carries no evidence and must not be laundered into a confirmation
-- Add "Cross-Model Verification Results" section to the integrity report (with the per-reference Source column and a `NOT_SEARCHED` count)
+- Add "Cross-Model Verification Results" section to the integrity report (with the per-reference Tier and Source columns and a `NOT_SEARCHED` count)
 
 **When not enabled:** Standard single-model verification. No behavioral change.
 
@@ -685,4 +691,4 @@ When the environment variable `ARS_CROSS_MODEL` is set, this agent enables cross
 | Transparency | Audit Trail fully documented, available for third-party review |
 | Efficiency | Do existence batch checks first, then deep investigation on NOT_FOUND / MISMATCH items |
 | No overstepping | Do not make paper quality judgments, only factual verification |
-| Cross-model (optional) | When `ARS_CROSS_MODEL` is set, 30% sample (min 5, max 15) cross-verified by second model, **one grounded API call per reference**; ungrounded (`NOT_SEARCHED`) verdicts never count as agreement |
+| Cross-model (optional) | When `ARS_CROSS_MODEL` is set, risk-stratified selection (HIGH-IMPACT 100% uncapped; Stage 2.5 adds a 10% RANDOM remainder sample, min 3 / max 10; Stage 4.5 instead adds NEW-CHANGED 100% uncapped + a 10% CONTROL sample of the unchanged remainder, min 3 / max 10; one tier per reference, highest wins) cross-verified by second model, **one grounded API call per reference**; ungrounded (`NOT_SEARCHED`) verdicts never count as agreement |

@@ -1,7 +1,7 @@
 ---
 name: idea-creator
 description: Generate and rank research ideas given a broad direction. Use when user says "找idea", "brainstorm ideas", "generate research ideas", "what can we work on", or wants to explore a research area for publishable directions.
-argument-hint: [research-direction]
+argument-hint: "[research-direction]"
 allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
@@ -19,7 +19,7 @@ Given a broad research direction from the user, systematically generate, validat
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
-- **REVIEWER_MODEL = `gpt-5.5`** — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.5`, `o3`, `gpt-4o`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so pasting into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so pasting into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
@@ -62,14 +62,17 @@ contract):
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+  ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
 [ -f "$WIKI_SCRIPT" ] || {
-  echo "WARN: research_wiki.py not found at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "WARN: research_wiki.py not found at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
   echo "      The idea-creation primary output (idea ranking) will still be produced." >&2
   echo "      Wiki integration (load query_pack, write idea pages, add edges, rebuild query_pack) will be skipped." >&2
-  echo "      Fix: rerun 'bash tools/install_aris.sh', export ARIS_REPO, or 'cp <ARIS-repo>/tools/research_wiki.py tools/'." >&2
+  echo "      Fix: rerun 'bash tools/install_aris.sh' or 'smart_update.sh' (refreshes ~/.aris/repo), export ARIS_REPO, or 'cp <ARIS-repo>/tools/research_wiki.py tools/'." >&2
   WIKI_SCRIPT=""
 }
 ```
@@ -390,35 +393,33 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 This is critical for spiral learning — without it, `ideas/` stays empty and re-ideation has no memory.
 
 `$WIKI_SCRIPT` was resolved in Phase 0 above. If Phase 0 did not run
-(no `research-wiki/`), this phase is skipped. If Phase 0 ran but the
-resolution chain failed to find the helper (`$WIKI_SCRIPT` is empty),
-the page-write step still runs (idea pages are plain markdown the
-agent writes directly), but the edge / query-pack / log steps that
-require the helper are skipped with a single warning.
+(no `research-wiki/`), skip this phase. The idea page is written by a
+**deterministic helper (`upsert_idea`)** — NOT freehand markdown — so **every
+generation, including a re-run with updated constraints, records reliably**
+(one CLI call per idea, not a prose step the model can skip). `upsert_idea`
+writes the page, wires the `inspired_by` / `addresses_gap` edges, and rebuilds
+index + query_pack in a single call. **Default skip-on-exist**: a re-ideation
+run records NEW ideas without clobbering an existing idea whose `outcome`
+`/result-to-claim` may already have enriched. If `$WIKI_SCRIPT` is empty
+(helper unreachable) the ideas are **NOT** recorded and a single WARN prints
+(fix: `bash tools/install_aris.sh` or `export ARIS_REPO`).
 
 ```
-if research-wiki/ exists:
+if research-wiki/ exists AND [ -n "$WIKI_SCRIPT" ]:
     for each idea in recommended_ideas + eliminated_ideas:
-        1. Create page: research-wiki/ideas/<idea_id>.md
-           - node_id: idea:<id>
-           - stage: proposed (or: piloted, archived)
-           - outcome: unknown (or: negative, mixed, positive)
-           - based_on: [paper:<slug>, ...]
-           - target_gaps: [gap:<id>, ...]
-           - Include: hypothesis, proposed method, expected outcome
-           - If pilot was run: actual outcome, failure notes, reusable components
-
-        2. Add edges (only if $WIKI_SCRIPT resolved):
-           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "paper:<slug>" --type inspired_by --evidence "..."
-           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "gap:<id>" --type addresses_gap --evidence "..."
-
-    Rebuild query pack (only if $WIKI_SCRIPT resolved):
-        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/
-    Log (only if $WIKI_SCRIPT resolved):
-        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
-
-    if [ -z "$WIKI_SCRIPT" ]:
-        echo "WARN: idea pages were written but edges / query_pack / log were skipped because research_wiki.py is unreachable (see Phase 0 warning above)." >&2
+        # recommended → --stage proposed; eliminated-at-ideation → --stage archived.
+        # --outcome stays "pending" (the experiment verdict, negative/mixed/positive,
+        # is set LATER by /result-to-claim — never guessed here).
+        python3 "$WIKI_SCRIPT" upsert_idea research-wiki/ \
+          --slug "<stable-idea-id>" --title "<idea title>" \
+          --stage "<proposed|archived>" --outcome pending \
+          --thesis "<core hypothesis / direction>" \
+          --risks "<novelty / feasibility risks; why killed if eliminated>" \
+          --based-on "<paper:slug,paper:slug2>" --target-gaps "<G2,G10>" \
+          || echo "WARN: upsert_idea failed for <id> (continuing; audit/report unaffected)" >&2
+    python3 "$WIKI_SCRIPT" log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
+elif research-wiki/ exists AND [ -z "$WIKI_SCRIPT" ]:
+    echo "WARN: ideas NOT recorded — research_wiki.py unreachable (see Phase 0). Fix: bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), or export ARIS_REPO." >&2
 ```
 
 ## Output Protocols

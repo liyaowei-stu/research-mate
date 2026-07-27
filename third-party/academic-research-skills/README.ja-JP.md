@@ -1,10 +1,11 @@
 # Claude Code 向け Academic Research Skills
 
-[![Version](https://img.shields.io/badge/version-v3.12.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.12.0)
+[![Version](https://img.shields.io/badge/version-v3.19.0-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v3.19.0)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20696614-blue)](https://doi.org/10.5281/zenodo.20696614)
 [![License: CC BY-NC 4.0](https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey)](https://creativecommons.org/licenses/by-nc/4.0/)
 [![Sponsor](https://img.shields.io/badge/sponsor-Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://buymeacoffee.com/crucify020v)
 
-[English](README.md) | [简体中文版](README.zh-CN.md) | [繁體中文版](README.zh-TW.md)
+[English](README.md) | [简体中文版](README.zh-CN.md) | [繁體中文版](README.zh-TW.md) | [한국어](README.ko-KR.md)
 
 学術研究のための Claude Code スキル統合スイート。研究から論文公開までの全工程をカバーします。
 
@@ -58,13 +59,15 @@ v3.3 は [**PaperOrchestra**](https://arxiv.org/abs/2604.05018)（Song, Song, Pf
 
 **動作確認:** `/ars-plan` を実行して取り組んでいる論文について説明してください — ARS がソクラテス式対話を開始し、章構成をマップします。代わりに単発テストを行うには、`/ars-lit-review "your topic"` を試してください。
 
-**👉 [docs/SETUP.md](docs/SETUP.md)** — 完全ガイド: Claude Code インストール、API キー設定、DOCX/PDF 用のオプション Pandoc/tectonic、クロスモデル検証（`ARS_CROSS_MODEL`）、5 つのインストール方法（Plugin、プロジェクトスキル、グローバルスキル、claude.ai Project、リポジトリクローン）。
+**👉 [docs/SETUP.md](docs/SETUP.md)** — 完全ガイド: Claude Code インストール、API キー設定、DOCX/PDF 用のオプション Pandoc/tectonic、クロスモデル検証（`ARS_CROSS_MODEL`）、6 つのインストール方法（Plugin、プロジェクトスキル、グローバルスキル、claude.ai Project、リポジトリクローン、Claude Science インポート）。
+
+**Claude Science をお使いですか？** 4 つのスキルは直接インポートできます: **Skills → Import from GitHub** で `https://github.com/Imbad0202/academic-research-skills` を貼り付け、**Preview** → **Import 4 skills**（本リポジトリ v3.14.0+ が必要 — インポーターは marketplace manifest に明示されたスキルパスを読み取ります）。インポートはその時点のスナップショットです: ARS の更新後は再インポートしてください。インポートされたスキルは ARS の方法論（研究・執筆・査読プロトコル）を伝えます。Claude Code 固有の仕組み — slash commands、hooks、サブエージェントオーケストレーション — は移行されません。詳細は [docs/SETUP.md](docs/SETUP.md) の Method 5 を参照。
 
 **Codex CLI を使用していますか?** 代わりに姉妹ディストリビューションをインストールしてください: [`Imbad0202/academic-research-skills-codex`](https://github.com/Imbad0202/academic-research-skills-codex) — 同じワークフローコンテンツ、`ars-*` エイリアスを持つ単一の `$academic-research-suite` スキルとしての Codex ネイティブパッケージング。
 
 ## パフォーマンス＆コスト
 
-**👉 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)** — モードごとのトークン予算、フルパイプライン見積り（15k 語の論文で約 $4-6）、推奨 Claude Code 設定（Skip Permissions; Agent Team オプション）。
+**👉 [docs/PERFORMANCE.md](docs/PERFORMANCE.md)** — モードごとのトークン予算、フルパイプライン見積り（15k 語の論文で約 $4-6）、推奨 Claude Code 設定（Auto モード; Agent Team オプション）。
 
 ## ガイド＆記事
 
@@ -148,7 +151,7 @@ You: "status"
 
 ### 個別スキル
 
-#### Deep Research（7 モード）
+#### Deep Research（8 モード）
 
 ```
 "Research the impact of AI on higher education"       → full モード
@@ -160,7 +163,7 @@ You: "status"
 "Review this paper's research quality"                → review モード
 ```
 
-#### Academic Paper（10 モード）
+#### Academic Paper（11 モード）
 
 ```
 "Write a paper on X"                                  → full モード
@@ -229,19 +232,19 @@ You: "status"
 
 エージェントごとの責務とステージごとの成果物は [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) に集約されました。リリースメタデータを一箇所にまとめるため、バージョン番号はここにアンカーされています。
 
-### Deep Research（v2.9.4）
+### Deep Research（v2.11.0）
 
-13 エージェントの研究チーム。モード: full、quick、review、lit-review、fact-check、socratic、systematic-review。完全なエージェント名簿と成果物: ARCHITECTURE.md §3 を参照。
+13 エージェントの研究チーム。モード: full、quick、review、lit-review、three-way-scan、fact-check、socratic、systematic-review。完全なエージェント名簿と成果物: ARCHITECTURE.md §3 を参照。
 
 ### Academic Paper（v3.2.0）
 
-12 エージェントの論文執筆パイプライン。モード: full、plan、outline-only、revision、revision-coach、abstract-only、lit-review、format-convert、citation-check、disclosure。出力: MD + DOCX（利用可能な場合 Pandoc 経由）+ LaTeX（APA 7.0 `apa7` クラス / IEEE / Chicago）→ tectonic 経由 PDF。完全なエージェント名簿とフェーズごとの責務: ARCHITECTURE.md §3 を参照。
+12 エージェントの論文執筆パイプライン。モード: full、plan、outline-only、revision、revision-coach、abstract-only、lit-review、format-convert、citation-check、disclosure、rebuttal-audit。出力: MD + DOCX（利用可能な場合 Pandoc 経由）+ LaTeX（APA 7.0 `apa7` クラス / IEEE / Chicago）→ tectonic 経由 PDF。完全なエージェント名簿とフェーズごとの責務: ARCHITECTURE.md §3 を参照。
 
 ### Academic Paper Reviewer（v1.10.0）
 
 **0-100 品質ルーブリック** を持つ 7 エージェントの多視点レビュー。モード: full、re-review、quick、methodology-focus、guided、calibration。**決定マッピング:** ≥80 Accept、65-79 Minor Revision、50-64 Major Revision、<50 Reject。初回レビューチーム vs. 限定的な再レビューチームの境界: ARCHITECTURE.md §3 Stage 3 / Stage 3' を参照。
 
-### Academic Pipeline（v3.12.0）
+### Academic Pipeline（v3.19.0）
 
 整合性検証、二段階レビュー、ソクラテス式コーチング、コラボレーション評価を持つ 10 ステージのオーケストレーター。パイプライン保証: 各ステージにユーザー確認チェックポイントが必要。整合性検証（Stage 2.5 + 4.5）はスキップできない。R&R Traceability Matrix（Schema 11）は著者の改訂主張を独立に検証する。v3.4 は Stage 2.5 / 4.5 に Compliance Agent（PRISMA-trAIce + RAISE）を追加した。v3.5 はすべての FULL/SLIM チェックポイントとパイプライン完了時に **Collaboration Depth Observer**（`collaboration_depth_agent`、advisory のみ — 決してブロックしない）を追加する。MANDATORY 整合性ゲート（2.5 / 4.5）は、コンプライアンスチェックが希薄化されないよう observer を明示的にスキップする。Wang & Zhang（2026）, IJETHE 23:11 に基づく。エージェント、成果物、ゲートを含むステージごとのマトリクス: ARCHITECTURE.md §3 を参照。
 
@@ -321,6 +324,38 @@ https://github.com/Imbad0202/academic-research-skills
 ---
 
 ## Changelog
+
+### v3.19.0 (2026-07-22) — 改訂ラウンドのクレームドリフト防御、PDF 読み取り整合性プリフライト、read-scope アテステーション
+
+> **追加**：3 つの advisory-or-opt-in 整合性層とランチャー修正。**改訂ラウンドのクレームドリフト防御（#569/#570）**：クレーム強度ラダー（`is associated with < predicts < causes` を、権限を与えるロードマップ項目なしに黙って動かさない）を改訂ドラフトと新しい advisory Phase E6 に接続し、決定論的な数値/引用トークン保存チェッカーを追加 — #390 の honest-claim 残余（触れたブロック内部に整合性チェックがなかった）の認識面とトークン面を閉じる。現行フロンティアモデルでベースラインを先に測定（`evals/heldout/revision_claim_drift/`）、メカニズムの着想は [Yila-AI/sci-ssci-skills](https://github.com/Yila-AI/sci-ssci-skills) に帰属。**PDF 読み取り整合性プリフライト（#512）**：3 信号のページ数クロスチェックにより、切り詰め/ページ番号ずれの PDF 読み取りが一見有効な `page` アンカーを生成できないようにする。**read_scope アテステーション（#513）**：人間読了台帳への任意の誠実カバレッジ宣言（`full_text` / `sections` / `abstract_only` / `toc_only`）で、ファイナライザの引用昇格を read-scope 対応にする。**ランチャー watchdog 修正（#545）**：正常な PreToolUse write-scope-guard 呼び出しを wall-clock 全体ブロックしていたパイプ停止を除去。スイートは v3.19.0 へ；基盤 3 スキルのバージョンは不変。
+
+### v3.18.0 (2026-07-18) — 自己改善サーベイ統合
+
+> **追加**：Ren et al.（2026、arXiv:2607.13104）に動機づけられた 8 つの品質メカニズム — サブ質問スコープ束縛＋Phase E スコープ整合アドバイザリ（#547）、検索範囲で有界化されたノベルティ主張＋E5 分類（#548、いずれも advisory-only、MANDATORY チェックポイントで行単位表示）；Stage 2.5 リスク層別クレーム検証（HIGH-IMPACT 全数＋ランダム歩哨、#549）；引用検証ゲートへのキャッシュ接続＋鮮度アドバイザリ＋opt-in 再検証（#541）；同意制クロスモデル査読席（固定 5 席の 1 席を別モデルファミリで、#540）と再査読の審査独立性＋Judge Record（#539）；ルーティング/ゲート頑健性評価シードセット（#550）；サーベイ自体を第 3 の human-in-the-loop 文献アンカーとして追加（#542）。サーベイ・トラックとは独立に、#544 SessionStart 更新リマインダーも搭載（インストール版が main より古い場合に `/plugin update` を案内；`ARS_UPDATE_CHECK=0` で無効化可）。`academic-pipeline` はスイートに追従して v3.18.0 へ；他 3 スキルのバージョンは不変。
+
+### v3.17.0 (2026-07-16) — パイプライン境界セマンティクス、正準クロスモデルハンドオフ・エンベロープ、実行可能パネルチェッカー
+
+> **修正:** #528 の 2 つの不明確なパイプライン境界を解消 — Stage 5 の「finalize 前は常に MANDATORY」は、Stage 4.5 の PASS と Stage 5 のディスパッチの間にある 1 つのチェックポイント（エントリーゲート）のみを指すよう定義され、Stage 6 には終端の確認語彙（`finish`/`end`/`done`/`confirm`）と明示的な辞退パスが追加された。5 つのパイプライン面すべてに全文 sha256 コンテンツロックが付与され（#529）、今後のプロンプト面のドリフトは同一コミットでハッシュを更新しない限り CI で失敗する。ブラインドチェックポイントの伝送はディスパッチ層へ移動（#523）— 元々 Bucket A のチェックポイント所有者にクロスモデル伝送の実行を求めていたが、ランタイムの Bash 拒否のもとでは実行不能だった。現在はディスパッチ層が伝送呼び出しを担う。**追加:** 正準 `[CROSS-MODEL-HANDOFF v1]` エンベロープ + 規範的な Python 文法（#527）が、これまでプローズのみで担保されていた owner→dispatcher→owner 伝送経路を置き換え、一致・不一致・不正形式の結果ルーティングを 3 つのチェックポイント所有者すべてに固定する。#514 ツール許可リストのドリフト防止ロック（#524、74 件のミューテーションテスト）は、エージェント本体とそのミラーを対称的に編集して Bash を静かに再追加するドリフト経路を塞ぐ。実行可能な sprint-contract パネルチェッカー（#510）は一次成果物から v3.6.2 の 2 層決定を再計算し、多数決の式にあった転記ミスを捕捉する。機械可読な degradation registry（#511 Part A）はスイート内のすべての優雅な劣化メカニズムを索引化し、引用検証ゲート向けの hermetic transport-fixture 統合テスト（#511 Part B）が 4 つのリゾルバークライアントをチェックイン済みの合成 API レスポンスに対してエンドツーエンドで検証する。`academic-pipeline` はスイートに合わせて v3.17.0 へ、他の 3 スキルのバージョンは変更ありません。
+
+### v3.16.0 (2026-07-12) — モデル階層化、クロスモデルゲート強化、WP アドバイザリ精緻化
+
+> **追加:** オプトインのモデル階層化（#517）— 新しい `ARS_MODEL_TIERING` スイッチに 2 方向（`economy`: 13 の実行型エージェントをセッションモデルの 1 段下で派遣、下限は Opus 級；`quality-boost`: 整合性ゲートと最終レビュー面の判断型エージェントをフロンティア段へ引き上げ）；未設定時は旧挙動とバイト等価で、凍結された 39 エージェント分類は新しいマニフェスト + lint で固定。クロスモデルゲート強化（#518）— リスク層別サンプリング（HIGH-IMPACT 参照は両ゲートで 100% 検証）、2 つの不可逆な決定点（設計凍結 + 最終編集判定）でのブラインド不一致チェック、検証モデル id ステータス許可リスト、昇格ベイクオフ・プロトコル；かつて計画されていた汎用第 6 レビュアーは延期ではなく廃止。GPT-5.6 Sol を暫定クロスモデル検証者として掲載し、明示的な reasoning-effort 制御を追加（#515）。devCharlotte 提案の韓国語トリガーキーワード + ルーティング境界フィクスチャ（#452/#509）。論文執筆側に CARS 序論レトリック + タイトル設計リファレンス（#500）。**変更:** WP 研究課題アドバイザリを名詞置換テストで 20 シェル表の外へ一般化（#501）し、装飾型タイトルシェルを捕捉するよう免除条項を精緻化（#505）— held-out 見逃し率 0.34–0.38 → 0.094、誤発火 0/16 を維持；レビュアー校正プロトコルに LLM 審査の寛大化方向を記載（FARS アンカー、#484）；OpenAlex API キー認証 + 予算対応 429 処理 + arXiv ToU 準拠バックオフ（#495/#496）。**ドキュメント:** THIRD_PARTY.md コミュニティディレクトリ（#497/#498）。`academic-pipeline` はスイートに合わせて v3.16.0 へ、他の 3 スキルのバージョンは変更ありません。
+
+### v3.15.0 (2026-07-04) — リリースゲート強化、プロンプト負債整理第 2 弾、ドリフト防止ロック
+
+> リリース規律と品質衛生を中心としたリリースで、スキルの挙動に変更はありません。**追加:** 3 つの CI ゲート — CHANGELOG-covers-merges のタグ前ゲート（#483）、version-consistency の invariant 9-11 とタグ時再実行ゲート（#487）、SessionStart アナウンス一覧を実際の 16 コマンド一覧に固定する command-invariants ゲート（#486）— に加え、2 つのドリフト防止ロック: Phase Boundary の enforcement 文を全 23 の Bucket A エージェントブロックで逐語固定し、SETUP のクロスモデル例を相互および正準モデル表に固定（#491 → #492）。**変更:** プロンプト負債整理第 2 弾は第 1 弾で先送りされた 17 エージェントを精査（#489 → #490）: 両 socratic_mentor の実害ある自己矛盾（期限切れの「15 ラウンドで打ち切り」規則 vs 文書化された典型 20-30 ラウンド）を修正、リポジトリ全体 29 箇所の期限切れ enforcement 状態文を修正、7 エージェントの few-shot と重複プロセス・スキャフォールドを削減 — 4 バッチ並列監査 + 独立 codex クロスモデルチャレンジで検証。監査レポートは `audits/` 配下。**修正:** DOI バッジを shields.io から配信（#482）。`academic-pipeline` はスイートに合わせて v3.15.0 へ、他の 3 スキルのバージョンは変更ありません。
+
+### v3.14.0 (2026-07-02) — Claude Science インポート対応、eval コメント表示、プロンプト負債の整理
+
+> 可搬性と仕上げに焦点を当てたリリースで、スキルの挙動に変更はありません。**追加:** Claude Science インポート対応 — marketplace manifest がスキルパスを明示的に宣言し、symlink の `skills/` ディレクトリを辿れない GitHub API ベースのインポーター（Claude Science「Import from GitHub」、Windows チェックアウト）でも 4 つのスキルすべてが検出されるようになりました。Claude Science 上でエンドツーエンド検証済み、README + SETUP にインポートガイドを追加（#480）。eval-harness の PR コメントは、生の JSON レポート全文の貼り付けに代わり、1 行の判定 + タスク別テーブル + `<details>` に折りたたんだ JSON で表示されます — 表示層のみの変更で、ゲートロジックはバイト単位で不変（#479）。**変更:** 2026-07 の harness-retirement 監査に基づき、4 つのライター系エージェントから期限切れの writing-harness スキャフォールドを除去（#476/#477 → #478、正味 −111 プロンプト行）。PR が新しいトップレベルディレクトリを追加した際に platform-ports ポリシーを通知する remind-don't-block の Platform Port Reminder を追加（#473）。**ドキュメント:** devCharlotte によるネイティブ査読済み韓国語 README（#469/#471）、GitHub Copilot repository instructions（#465）、Skip Permissions より auto permission mode を推奨（#464）。`[Unreleased]` に蓄積されていた 16 件のバックログ（コードはいずれも v3.13.0 タグ以前に反映済み — diff/patch revision mode #390、submission-package verifier #394、eval gold sets #215/#216 ほか）をバージョン記録に統合。詳細は `CHANGELOG.md` を参照。`academic-pipeline` はスイートに合わせて v3.14.0 へ、他の 3 スキルのバージョンは変更ありません。
+
+### v3.13.0 (2026-06-18) — フック移植性、プロバイダ非依存の検証、ガード正確性
+
+> インストール／実行面を堅牢化し、クロスモデルの到達範囲を広げた minor release。**修正：** git-clone + symlink インストール構成でも write-scope ガードがユーザー自身の `CLAUDE.md` を誤って拒否しなくなった（#459、#448/#449 の残り半分を解消——`CLAUDE.md` は enforcement を担うファイルではなくドキュメントなので infra 保護リストから外し、担保ファイルはすべて保護を維持）。Windows の Python フック移植性 + Python 非在時の graceful degradation を、0-byte の Microsoft Store `python3` スタブを拒否しフックログを汚さないクロスプラットフォーム `hooks/run_guard.sh` launcher で実現（#454）。`draft_writer` の dual-phase static union を文書化 + Windows POSIX-safe なパスマッチング（#451）。**追加：** grounded first-party OpenAI と並んで OpenAI 互換エンドポイント（MiMo、DeepSeek、セルフホスト）を受け付けるプロバイダ非依存のクロスモデル検証（first-party は決して暗黙的にダウングレードしない）（#455）。opt-in の Socratic 隣接フレーミング probe（STORM 由来の視点拡張、`ARS_SOCRATIC_ADJACENT_PROBE=1`、デフォルト OFF、prose-layer のみ——`deep-research` 2.10.0 → 2.11.0）（#461）。`academic-pipeline` はスイートに合わせて v3.13.0、`academic-paper` と `academic-paper-reviewer` は変更なし。issue ごとの詳細は `CHANGELOG.md` を参照。
+
+### v3.12.1 (2026-06-15) — 査読応答トリアージモード（PR #433 統合）
+
+> ARS のモードベース・アーキテクチャに従い、外部コントリビューションの真に新規な部分を既存スキルのモードとして取り込んだ patch release。**新モード：** `deep-research` `three-way-scan` —— `quick` と `lit-review` の中間に位置する軽量な WHY/HOW/WHAT 論文比較トリアージ。論文ごとのショートリストと論文間の統合を生成（`deep-research` 2.9.4 → 2.10.0）。`academic-paper` `rebuttal-audit` —— 著者の既存リバッタル／応答ドラフトを査読コメントと突き合わせる独立アドバイザリ QA（コメントごとのカバレッジ表 + ギャップリスト + トーン／根拠／誤読のリスクフラグ）。何も生成せず、スタンドアロン実行時は Schema 11／Material Passport 書き込み／`ready_to_submit` を明示的に抑制（mutation カバレッジ付きの `check_rebuttal_audit_guard()` lint で強制）。加えて `revision-coach` のスコープを反論／不同意の姿勢と非ジャーナル文脈に拡張、`/ars-3w` + `/ars-rebuttal-audit` スラッシュコマンドを追加。入力形状でルーティング：査読コメント AND ドラフト → `rebuttal-audit`、コメントのみ → `revision-coach`。[@Yaobin29](https://github.com/Yaobin29) の [PR #433](https://github.com/Imbad0202/academic-research-skills/pull/433) から統合。スイートのモード数 25 → 27（スキルは 4 つのまま）。issue ごとの詳細は `CHANGELOG.md` を参照。
 
 ### v3.12.0 (2026-06-08) — Kong 自動研究フィーチャートラック：実験来歴・図表フィデリティ・論文間矛盾・部分証拠の分解
 

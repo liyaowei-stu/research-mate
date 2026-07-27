@@ -4,9 +4,23 @@ description: Observe the user's screen via screenpipe, detect repeated research 
 allowed-tools: Read Write Edit Bash
 license: MIT license
 metadata:
-  version: "1.0"
+  version: "1.2"
   skill-author: K-Dense Inc.
-  requires: screenpipe
+  openclaw:
+    requires:
+      bins:
+      - screenpipe
+    primaryEnv: SCREENPIPE_TOKEN
+    envVars:
+    - name: SCREENPIPE_TOKEN
+      required: true
+      description: Auth token for the local screenpipe daemon.
+    - name: ANTHROPIC_API_KEY
+      required: false
+      description: For Claude API calls during skill drafting.
+    - name: FOUNDRY_API_KEY
+      required: false
+      description: Optional Foundry access for drafting.
 ---
 
 # autoskill
@@ -208,11 +222,10 @@ claude:
 
 ## Testing
 
-The skill is covered by a small pytest suite at `tests/`. Each script is unit-tested in isolation with dependency injection (mock HTTP transport, stub backend, stub embedder):
+The skill is covered by a small pytest suite at `tests/autoskill/` in the repository root. Each script is unit-tested in isolation with dependency injection (mock HTTP transport, stub backend, stub embedder):
 
 ```bash
-cd skills/autoskill
-python -m pytest tests/ -v
+python -m pytest tests/autoskill -v
 ```
 
 ## Composition with other skills in this repo

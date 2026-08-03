@@ -26,20 +26,20 @@ JA_README_TEMPLATE = """\
 
 ## クイックスタート
 
-#### Deep Research（7 モード）
+#### Deep Research（8 モード）
 - outline-only モード
 - abstract-only モード
 - disclosure モード
 - review モード
 
-#### Academic Paper（10 モード）
+#### Academic Paper（11 モード）
 
 #### Academic Paper Reviewer（6 モード）
 - calibration モード
 
 #### Academic Pipeline（オーケストレーター）
 
-### Deep Research（v2.9.4）
+### Deep Research（v2.11.0）
 ### Academic Paper（v3.2.0）
 ### Academic Paper Reviewer（v1.10.0）
 ### Academic Pipeline（v{ver}）
@@ -87,6 +87,78 @@ def _write_ja_readme(root: Path, version: str) -> None:
     )
 
 
+# Minimal ko-KR README capturing the version-bearing surfaces check_readme_ko_sections
+# polices: badge, release tag link, the same release-block list as the other locales,
+# four localized mode headings ("N개 모드" with ASCII parens — Korean typographic norm
+# matching English/ja, NOT the full-width zh form), four skill-detail headings (English
+# ASCII-paren form reused verbatim), and the Korean DOCX line.
+KO_README_TEMPLATE = """\
+# Academic Research Skills
+
+[![Version](https://img.shields.io/badge/version-v{ver}-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v{ver})
+
+## 빠른 시작
+
+#### Deep Research (8개 모드)
+- outline-only 모드
+- abstract-only 모드
+- disclosure 모드
+- review 모드
+
+#### Academic Paper (11개 모드)
+
+#### Academic Paper Reviewer (6개 모드)
+- calibration 모드
+
+#### Academic Pipeline (오케스트레이터)
+
+### Deep Research (v2.11.0)
+### Academic Paper (v3.2.0)
+### Academic Paper Reviewer (v1.10.0)
+### Academic Pipeline (v{ver})
+
+### 지원되는 출력 형식
+
+- DOCX (가능한 경우 Pandoc 경유)
+
+## 변경 이력
+
+### v3.19.0 (2026-07-22) — current release
+### v3.18.0 (2026-07-18) — prior minor
+### v3.12.0 (2026-06-08) — prior release
+### v3.11.1 (2026-06-06) — prior patch
+### v3.11.0 (2026-06-04) — prior patch
+### v3.10.0 (2026-06-01) — prior minor
+### v3.9.4.2 (2026-05-19) — CI discipline hotfix
+### v3.9.4.1 (2026-05-19) — previous hotfix
+### v3.9.4 (2026-05-18) — temporal verification
+### v3.9.1 (2026-05-18) — client hardening
+### v3.9.0 (2026-05-17) — triangulation
+### v3.8.0 (2026-05-16) — L3 audit
+### v3.7.0 (2026-05-05) — plugin packaging
+### v3.6.8 (2026-05-03) — generator-evaluator
+### v3.6.7 (2026-04-30) — pattern protection
+### v3.6.5 (2026-04-27) — corpus consumer
+### v3.6.4 (2026-04-25) — corpus input port
+### v3.6.3 (2026-04-23) — passport reset
+### v3.6.2 (2026-04-23) — reviewer sprint
+### v3.5.1 (2026-04-22) — reading-check probe
+### v3.5.0 (2026-04-21) — collaboration depth
+### v3.4.0 (2026-04-20) — compliance agent
+### v3.3.6 (2026-04-15) — README streamlining
+### v3.3.5 (2026-04-15)
+### v3.3.4 (2026-04-15) — changelog sync
+### v3.3.3 (2026-04-15) — release prep
+### v3.3.2 (2026-04-15) — data access levels
+"""
+
+
+def _write_ko_readme(root: Path, version: str) -> None:
+    (root / "README.ko-KR.md").write_text(
+        KO_README_TEMPLATE.format(ver=version), encoding="utf-8"
+    )
+
+
 # Minimal zh-CN README capturing the version-bearing surfaces the lint needs
 # to police via ZH_README_CONFIGS[1]: badge, release tag link, the same
 # release-block list as zh-TW, four Simplified-Chinese localized mode
@@ -96,10 +168,10 @@ ZH_CN_README_TEMPLATE = """\
 
 [![Version](https://img.shields.io/badge/version-v{ver}-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v{ver})
 
-#### Deep Research（深度研究，7 种模式）
+#### Deep Research（深度研究，8 种模式）
 - review mode
 
-#### Academic Paper（学术论文撰写，10 种模式）
+#### Academic Paper（学术论文撰写，11 种模式）
 - outline-only mode
 - abstract-only mode
 - disclosure mode
@@ -109,7 +181,7 @@ ZH_CN_README_TEMPLATE = """\
 
 #### Academic Pipeline（全流程调度器）
 
-### Deep Research (v2.9.4)
+### Deep Research (v2.11.0)
 ### Academic Paper (v3.2.0)
 ### Academic Paper Reviewer (v1.10.0)
 ### Academic Pipeline (v{ver})
@@ -163,10 +235,10 @@ ZH_TW_README_TEMPLATE = """\
 
 [![Version](https://img.shields.io/badge/version-v{ver}-blue)](https://github.com/Imbad0202/academic-research-skills/releases/tag/v{ver})
 
-#### Deep Research（深度研究，7 種模式）
+#### Deep Research（深度研究，8 種模式）
 - review mode
 
-#### Academic Paper（學術論文撰寫，10 種模式）
+#### Academic Paper（學術論文撰寫，11 種模式）
 - outline-only mode
 - abstract-only mode
 - disclosure mode
@@ -176,7 +248,7 @@ ZH_TW_README_TEMPLATE = """\
 
 #### Academic Pipeline（全流程調度器）
 
-### Deep Research (v2.9.4)
+### Deep Research (v2.11.0)
 ### Academic Paper (v3.2.0)
 ### Academic Paper Reviewer (v1.10.0)
 ### Academic Pipeline (v{ver})
@@ -240,7 +312,7 @@ class TestReadmeJaSections(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             csc.ROOT = root
-            _write_ja_readme(root, version="3.12.0")
+            _write_ja_readme(root, version="3.19.0")
 
             csc.check_readme_ja_sections()
 
@@ -260,18 +332,108 @@ class TestReadmeJaSections(unittest.TestCase):
             # Write the "current" v3.9.4.2 release block but downgrade only
             # the badge and tag link to v3.9.4.0. This is the realistic shape
             # of drift when one place gets forgotten during a release.
-            stale = JA_README_TEMPLATE.format(ver="3.12.0").replace(
-                "version-v3.12.0-blue", "version-v3.9.4.0-blue"
+            stale = JA_README_TEMPLATE.format(ver="3.19.0").replace(
+                "version-v3.19.0-blue", "version-v3.9.4.0-blue"
             ).replace(
-                "releases/tag/v3.12.0", "releases/tag/v3.9.4.0"
+                "releases/tag/v3.19.0", "releases/tag/v3.9.4.0"
             )
             (root / "README.ja-JP.md").write_text(stale, encoding="utf-8")
 
             csc.check_readme_ja_sections()
 
             self.assertTrue(
-                any("README.ja-JP.md" in e and "v3.12.0" in e for e in csc.ERRORS),
+                any("README.ja-JP.md" in e and "v3.19.0" in e for e in csc.ERRORS),
                 msg=f"expected ja-JP drift error in: {csc.ERRORS!r}",
+            )
+
+
+class TestReadmeKoSections(unittest.TestCase):
+    def setUp(self) -> None:
+        # check_spec_consistency uses module-level ROOT and ERRORS. Reset and
+        # restore around each test so state does not leak between cases.
+        self._orig_root = csc.ROOT
+        self._orig_errors = list(csc.ERRORS)
+        csc.ERRORS.clear()
+
+    def tearDown(self) -> None:
+        csc.ROOT = self._orig_root
+        csc.ERRORS.clear()
+        csc.ERRORS.extend(self._orig_errors)
+
+    def test_aligned_ko_readme_passes(self) -> None:
+        """A README.ko-KR.md whose badge / tag link / release headings / Korean
+        mode + skill headings all agree with the suite version must pass."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csc.ROOT = root
+            _write_ko_readme(root, version="3.19.0")
+
+            csc.check_readme_ko_sections()
+
+            self.assertEqual(
+                csc.ERRORS, [],
+                msg=f"unexpected errors on aligned ko fixture: {csc.ERRORS!r}",
+            )
+
+    def test_stale_ko_badge_fails(self) -> None:
+        """Symmetric to the ja drift regression: a stale badge / tag link on
+        README.ko-KR.md must surface the drift rather than silently passing."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csc.ROOT = root
+            stale = KO_README_TEMPLATE.format(ver="3.19.0").replace(
+                "version-v3.19.0-blue", "version-v3.9.4.0-blue"
+            ).replace(
+                "releases/tag/v3.19.0", "releases/tag/v3.9.4.0"
+            )
+            (root / "README.ko-KR.md").write_text(stale, encoding="utf-8")
+
+            csc.check_readme_ko_sections()
+
+            self.assertTrue(
+                any("README.ko-KR.md" in e and "v3.19.0" in e for e in csc.ERRORS),
+                msg=f"expected ko-KR drift error in: {csc.ERRORS!r}",
+            )
+
+    def test_missing_korean_mode_heading_fails(self) -> None:
+        """If a localized mode heading is dropped (e.g. the "N개 모드" form is
+        accidentally written in the English "(8 modes)" shape), the lint must
+        catch it — proving the heading checks are load-bearing, not vacuous."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csc.ROOT = root
+            broken = KO_README_TEMPLATE.format(ver="3.19.0").replace(
+                "#### Deep Research (8개 모드)", "#### Deep Research (8 modes)"
+            )
+            (root / "README.ko-KR.md").write_text(broken, encoding="utf-8")
+
+            csc.check_readme_ko_sections()
+
+            self.assertTrue(
+                any("README.ko-KR.md" in e and "8개 모드" in e for e in csc.ERRORS),
+                msg=f"expected missing-heading error in: {csc.ERRORS!r}",
+            )
+
+    def test_full_width_korean_changelog_parentheses_fail(self) -> None:
+        """Korean changelog headings use ASCII parentheses, not full-width forms."""
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            csc.ROOT = root
+            broken = KO_README_TEMPLATE.format(ver="3.19.0").replace(
+                "### v3.18.0 (2026-07-18)",
+                "### v3.18.0（2026-07-18）",
+            )
+            (root / "README.ko-KR.md").write_text(broken, encoding="utf-8")
+
+            csc.check_readme_ko_sections()
+
+            self.assertTrue(
+                any(
+                    "README.ko-KR.md" in e
+                    and "### v3.18.0 (2026-07-18)" in e
+                    for e in csc.ERRORS
+                ),
+                msg=f"expected Korean parenthesis-style error in: {csc.ERRORS!r}",
             )
 
 
@@ -296,8 +458,8 @@ class TestReadmeZhSections(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             csc.ROOT = root
-            _write_zh_tw_readme(root, version="3.12.0")
-            _write_zh_cn_readme(root, version="3.12.0")
+            _write_zh_tw_readme(root, version="3.19.0")
+            _write_zh_cn_readme(root, version="3.19.0")
 
             csc.check_readme_zh_sections()
 
@@ -313,18 +475,18 @@ class TestReadmeZhSections(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             csc.ROOT = root
-            _write_zh_tw_readme(root, version="3.12.0")
-            stale = ZH_CN_README_TEMPLATE.format(ver="3.12.0").replace(
-                "version-v3.12.0-blue", "version-v3.9.4.0-blue"
+            _write_zh_tw_readme(root, version="3.19.0")
+            stale = ZH_CN_README_TEMPLATE.format(ver="3.19.0").replace(
+                "version-v3.19.0-blue", "version-v3.9.4.0-blue"
             ).replace(
-                "releases/tag/v3.12.0", "releases/tag/v3.9.4.0"
+                "releases/tag/v3.19.0", "releases/tag/v3.9.4.0"
             )
             (root / "README.zh-CN.md").write_text(stale, encoding="utf-8")
 
             csc.check_readme_zh_sections()
 
             self.assertTrue(
-                any("README.zh-CN.md" in e and "v3.12.0" in e for e in csc.ERRORS),
+                any("README.zh-CN.md" in e and "v3.19.0" in e for e in csc.ERRORS),
                 msg=f"expected zh-CN drift error in: {csc.ERRORS!r}",
             )
 
@@ -824,6 +986,49 @@ class TestSuiteSkillDateSanity(unittest.TestCase):
                 len(pipeline_errors), 1,
                 msg=f"expected exactly one pipeline error, got {len(pipeline_errors)}: {pipeline_errors!r}",
             )
+
+
+class RebuttalAuditGuardTest(unittest.TestCase):
+    """check_rebuttal_audit_guard() must enforce the integrity-boundary language
+    in the academic-paper Rebuttal-Audit Mode section. Mutation tests prove the
+    guard actually fails when the suppression language is dropped — otherwise the
+    check would be a vacuous pass that lets the false-certification risk back in."""
+
+    _GOOD = (
+        "## Rebuttal-Audit Mode\n\n"
+        "Advisory QA of an existing rebuttal draft.\n\n"
+        "**IRON RULE:** standalone, so it MUST NOT emit a Schema 11 ledger, "
+        "MUST NOT write the Material Passport, and MUST NOT mark ready_to_submit.\n\n"
+        "## Next Section\n"
+    )
+
+    def _run_guard_with(self, skill_text: str) -> list:
+        orig_read = csc.read
+        csc.ERRORS.clear()
+        try:
+            csc.read = lambda rel: skill_text if rel == "academic-paper/SKILL.md" else orig_read(rel)
+            csc.check_rebuttal_audit_guard()
+            return list(csc.ERRORS)
+        finally:
+            csc.read = orig_read
+            csc.ERRORS.clear()
+
+    def test_guard_passes_with_full_suppression_language(self) -> None:
+        self.assertEqual(self._run_guard_with(self._GOOD), [])
+
+    def test_guard_fails_when_section_missing(self) -> None:
+        errs = self._run_guard_with("## Some Other Mode\n\nno rebuttal section here\n")
+        self.assertTrue(any("missing" in e and "Rebuttal-Audit" in e for e in errs), errs)
+
+    def test_guard_fails_when_schema11_suppression_dropped(self) -> None:
+        mutated = self._GOOD.replace("Schema 11", "the tracker")
+        errs = self._run_guard_with(mutated)
+        self.assertTrue(any("Schema 11" in e for e in errs), errs)
+
+    def test_guard_fails_when_must_not_dropped(self) -> None:
+        mutated = self._GOOD.replace("MUST NOT", "should avoid")
+        errs = self._run_guard_with(mutated)
+        self.assertTrue(any("MUST NOT" in e for e in errs), errs)
 
 
 if __name__ == "__main__":

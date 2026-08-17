@@ -38,7 +38,7 @@ For each stage transition, the following handoff procedure applies:
 | **Who receives** | Lead Author |
 | **Materials** | RQ Brief, Bibliography, Synthesis Report (conforming to Schemas 1-3 in `shared/handoff_schemas.md`) |
 | **Approval needed** | Research Lead confirms synthesis is complete and RQ is finalized |
-| **Handoff checklist** | All Material Passports (Schema 9) attached; Bibliography minimum source count met; Synthesis has 3+ themes |
+| **Handoff checklist** | All Material Passports (Schema 9) attached; bibliography coverage is assessed against the planned claims and field-specific evidence needs; synthesis structure fits the material rather than a fixed theme count |
 
 ### Stage 2 -> Stage 2.5 (Write -> Integrity)
 
@@ -76,9 +76,9 @@ For each stage transition, the following handoff procedure applies:
 |------|--------|
 | **Who hands off** | Lead Author |
 | **Who receives** | Review Coordinator |
-| **Materials** | Revised Draft + Response to Reviewers (Schema 8) |
+| **Materials** | Revised Draft + hard-required Original pre-revision Draft + immutable Round-1 Revision Roadmap + exact author-adjudication sidecar + fully replayed Revision-Evidence Bundle + Response to Reviewers + Editorial Decision Letter + Round-1 findings + exact ordered patch/report pairs matching the bundle + Round-1 Reviewer Configuration Cards. This is the default current #576 1.1 re-review transfer; missing original/roadmap/author/bundle fails closed. A user-requested fresh full review at 3' is a separate branch with Revised Draft + available context. |
 | **Approval needed** | Lead Author confirms all addressable items are handled |
-| **Handoff checklist** | Response to Reviewers covers every roadmap item; new references verified |
+| **Handoff checklist** | Re-review mode: Response to Reviewers covers every roadmap item; new references verified. Fresh full review at 3': no roadmap-coverage check (no Round-1 Roadmap exists); new references verified |
 
 ### Stage 4.5 -> Stage 5 (Final Integrity -> Finalize)
 

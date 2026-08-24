@@ -14,6 +14,7 @@
  */
 
 import type {
+  CustomEntry,
   ExtensionAPI,
   ExtensionContext,
   SessionBeforeCompactEvent,
@@ -108,6 +109,41 @@ interface ExperimentState {
   maxExperiments: number | null;
   /** Current session confidence score (best improvement / noise floor). null if insufficient data. */
   confidence: number | null;
+}
+
+export const AUTORESUME_TURN_LIMIT = 200;
+export const CONSECUTIVE_FAILURE_OVERRIDE_LIMIT = 20;
+
+type AutoResumeGuardState = Pick<ExperimentState, "results" | "currentSegment">;
+type AutoResumeGuardRuntime = {
+  autoResumeTurns: number;
+  state: AutoResumeGuardState;
+};
+
+/** Count trailing discard/crash results in the current segment. */
+export function countConsecutiveDiscardOrCrashResults(state: AutoResumeGuardState): number {
+  let count = 0;
+  for (let i = state.results.length - 1; i >= 0; i--) {
+    const result = state.results[i];
+    if (result.segment !== state.currentSegment) break;
+    if (result.status === "discard" || result.status === "crash") {
+      count++;
+      continue;
+    }
+    break;
+  }
+  return count;
+}
+
+export function autoResumeStopReasonFor(runtime: AutoResumeGuardRuntime): string | null {
+  if (runtime.autoResumeTurns >= AUTORESUME_TURN_LIMIT) {
+    return `Autoresearch auto-resume limit reached (${AUTORESUME_TURN_LIMIT} turns)`;
+  }
+  const failures = countConsecutiveDiscardOrCrashResults(runtime.state);
+  if (failures > CONSECUTIVE_FAILURE_OVERRIDE_LIMIT) {
+    return `Autoresearch auto-resume stopped — ${failures} consecutive discards/crashes`;
+  }
+  return null;
 }
 
 interface RunDetails {
@@ -460,6 +496,66 @@ function resolveWorkDir(ctxCwd: string): string {
   return path.isAbsolute(config.workingDir)
     ? config.workingDir
     : path.resolve(ctxCwd, config.workingDir);
+}
+
+function canonicalPath(existingPath: string): string {
+  try {
+    return fs.realpathSync.native(existingPath);
+  } catch {
+    return path.resolve(existingPath);
+  }
+}
+
+function samePath(a: string, b: string): boolean {
+  return canonicalPath(a) === canonicalPath(b);
+}
+
+const AUTORESEARCH_ACTIVATION_ENTRY = "pi-autoresearch.activation";
+
+interface AutoresearchActivationEntryData {
+  version?: number;
+  workDir?: string;
+  active?: boolean;
+}
+
+export function shouldAutoActivateAutoresearch(
+  ctxCwd: string,
+  workDir: string,
+  hasPersistedLog: boolean,
+  recordedDecision: boolean | null = null,
+): boolean {
+  if (!hasPersistedLog) return false;
+  // An explicit `/autoresearch on|off` in this session always wins, so a manual
+  // off survives /tree, compaction, and reloads instead of snapping back on.
+  if (recordedDecision !== null) return recordedDecision;
+  // With no recorded decision, same-cwd sessions default on (a log implies intent);
+  // redirected workingDir sessions default off until this session opts in.
+  return samePath(ctxCwd, workDir);
+}
+
+function autoresearchActivationData(entry: CustomEntry): AutoresearchActivationEntryData | null {
+  if (entry.customType !== AUTORESEARCH_ACTIVATION_ENTRY) return null;
+
+  const data = entry.data as AutoresearchActivationEntryData | undefined;
+  if (typeof data?.workDir !== "string") return null;
+
+  return data;
+}
+
+function recordedActivationDecision(ctx: ExtensionContext, workDir: string): boolean | null {
+  const canonicalWorkDir = canonicalPath(workDir);
+  let decision: boolean | null = null;
+
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== "custom") continue;
+
+    const data = autoresearchActivationData(entry);
+    if (!data || canonicalPath(data.workDir) !== canonicalWorkDir) continue;
+
+    decision = data.active === true;
+  }
+
+  return decision;
 }
 
 /**
@@ -970,7 +1066,6 @@ function renderDashboardLines(
 // ---------------------------------------------------------------------------
 
 export default function autoresearchExtension(pi: ExtensionAPI) {
-  const MAX_AUTORESUME_TURNS = 20;
   const BENCHMARK_GUARDRAIL =
     "Be careful not to overfit to the benchmarks and do not cheat on the benchmarks.";
 
@@ -1009,6 +1104,14 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     pi.setActiveTools([...activeTools]);
   };
 
+  const recordAutoresearchActivation = (workDir: string, active: boolean): void => {
+    pi.appendEntry(AUTORESEARCH_ACTIVATION_ENTRY, {
+      version: 1,
+      workDir: canonicalPath(workDir),
+      active,
+    });
+  };
+
   const isAgentSettled = (ctx: ExtensionContext): boolean =>
     ctx.isIdle() && !ctx.hasPendingMessages();
 
@@ -1039,9 +1142,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       return;
     }
     if (!isAgentSettled(ctx)) return;
-    if (hasReachedAutoResumeLimit(runtime)) {
+    const stopReason = autoResumeStopReasonFor(runtime);
+    if (stopReason !== null) {
       cancelPendingResume(runtime);
-      notifyAutoResumeLimitReached(ctx);
+      notifyAutoResumeLimitReached(ctx, stopReason);
       return;
     }
 
@@ -1075,14 +1179,8 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   const shouldAutoResumeAfterCompact = (runtime: AutoresearchRuntime): boolean =>
     runtime.autoresearchMode;
 
-  const hasReachedAutoResumeLimit = (runtime: AutoresearchRuntime): boolean =>
-    runtime.autoResumeTurns >= MAX_AUTORESUME_TURNS;
-
-  const notifyAutoResumeLimitReached = (ctx: ExtensionContext): void => {
-    ctx.ui.notify(
-      `Autoresearch auto-resume limit reached (${MAX_AUTORESUME_TURNS} turns)`,
-      "info",
-    );
+  const notifyAutoResumeLimitReached = (ctx: ExtensionContext, reason?: string | null): void => {
+    ctx.ui.notify(reason ?? `Autoresearch auto-resume limit reached`, "info");
   };
 
   const composeResumeMessage = (_ctx: ExtensionContext): string => {
@@ -1220,9 +1318,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
     // Primary: read from .auto/log.jsonl (alongside .auto/prompt.md and .auto/measure.sh)
     const jsonlPath = autoresearchJsonlPath(workDir);
+    const hasPersistedLog = fs.existsSync(jsonlPath);
     let loadedFromJsonl = false;
     try {
-      if (fs.existsSync(jsonlPath)) {
+      if (hasPersistedLog) {
         const reconstructed = reconstructJsonlState(fs.readFileSync(jsonlPath, "utf-8"));
         state.name = reconstructed.name;
         state.metricName = reconstructed.metricName;
@@ -1275,8 +1374,19 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     // Read max experiments from config file
     state.maxExperiments = readMaxExperiments(ctx.cwd);
 
-    // Auto-enter autoresearch mode only when a persisted experiment log exists
-    setAutoresearchMode(ctx, fs.existsSync(autoresearchJsonlPath(workDir)));
+    // Auto-enter autoresearch mode only when a persisted experiment log exists.
+    // A recorded `/autoresearch on|off` in this session wins; otherwise same-cwd
+    // sessions default on and redirected workingDir sessions default off, so
+    // unrelated chats launched from a shared cwd never activate it.
+    setAutoresearchMode(
+      ctx,
+      shouldAutoActivateAutoresearch(
+        ctx.cwd,
+        workDir,
+        hasPersistedLog,
+        recordedActivationDecision(ctx, workDir),
+      ),
+    );
 
     updateWidget(ctx);
   };
@@ -1286,6 +1396,11 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
     const runtime = getRuntime(ctx);
     const state = runtime.state;
+
+    if (!runtime.autoresearchMode) {
+      ctx.ui.setWidget("autoresearch", undefined);
+      return;
+    }
 
     if (state.results.length === 0) {
       if (!runtime.runningExperiment) {
@@ -1375,8 +1490,9 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       return;
     }
     if (!gate(runtime)) return;
-    if (hasReachedAutoResumeLimit(runtime)) {
-      notifyAutoResumeLimitReached(ctx);
+    const stopReason = autoResumeStopReasonFor(runtime);
+    if (stopReason !== null) {
+      notifyAutoResumeLimitReached(ctx, stopReason);
       return;
     }
     schedulePendingResume(ctx, runtime, composeMessage(ctx));
@@ -1520,6 +1636,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       }
 
       const wasInactive = !runtime.autoresearchMode;
+      recordAutoresearchActivation(workDir, true);
       setAutoresearchMode(ctx, true);
       updateWidget(ctx);
 
@@ -2346,6 +2463,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       const limitReached = state.maxExperiments !== null && segmentCount >= state.maxExperiments;
       if (limitReached) {
         text += `\n\n🛑 Maximum experiments reached (${state.maxExperiments}). STOP the experiment loop now.`;
+        recordAutoresearchActivation(workDir, false);
         setAutoresearchMode(ctx, false);
         ctx.abort();
       } else if (runtime.autoresearchMode) {
@@ -2460,6 +2578,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       handler: async (ctx) => {
         const runtime = getRuntime(ctx);
         const state = runtime.state;
+        if (!runtime.autoresearchMode) {
+          ctx.ui.notify("Autoresearch mode is not active", "info");
+          return;
+        }
         if (state.results.length === 0) {
           ctx.ui.notify("No experiments yet", "info");
           return;
@@ -2654,17 +2776,20 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   const dashboardSseClients = new Set<ServerResponse>();
 
   function openInBrowser(url: string): void {
-    if (process.platform === "win32") {
-      spawn("cmd", ["/c", "start", "", url], {
-        detached: true,
-        shell: true,
-        stdio: "ignore",
-      }).unref();
-      return;
-    }
-
-    const openCmd = process.platform === "darwin" ? "open" : "xdg-open";
-    spawn(openCmd, [url], { detached: true, stdio: "ignore" }).unref();
+    const child = process.platform === "win32"
+      ? spawn("cmd", ["/c", "start", "", url], {
+          detached: true,
+          shell: true,
+          stdio: "ignore",
+        })
+      : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
+          detached: true,
+          stdio: "ignore",
+        });
+    // Swallow launcher errors (e.g. xdg-open missing); caller prints the URL
+    // so the user can open it manually.
+    child.on("error", () => { /* ignore */ });
+    child.unref();
   }
 
   function stopDashboardServer(): void {
@@ -2835,7 +2960,9 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
       if (command === "off") {
         const wasRunning = !ctx.isIdle();
+        const workDir = resolveWorkDir(ctx.cwd);
 
+        recordAutoresearchActivation(workDir, false);
         setAutoresearchMode(ctx, false);
         runtime.autoResumeTurns = 0;
         runtime.experimentsThisSession = 0;
@@ -2861,6 +2988,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       if (command === "clear") {
         const workDir = resolveWorkDir(ctx.cwd);
         const jsonlPaths = sessionFileCandidates(workDir, "log");
+        recordAutoresearchActivation(workDir, false);
         setAutoresearchMode(ctx, false);
         runtime.autoResumeTurns = 0;
         runtime.experimentsThisSession = 0;
@@ -2900,10 +3028,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
         return;
       }
 
+      const workDir = resolveWorkDir(ctx.cwd);
+      recordAutoresearchActivation(workDir, true);
       setAutoresearchMode(ctx, true);
       runtime.autoResumeTurns = 0;
-
-      const workDir = resolveWorkDir(ctx.cwd);
       const rulesLoaded = hasAutoresearchRules(ctx);
       // No .auto/prompt.md yet — load the create skill so the agent follows the
       // setup guidelines. `/skill:<name>` is expanded to the full SKILL.md by

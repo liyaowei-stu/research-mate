@@ -1,11 +1,16 @@
 ---
 name: kill-argument
 description: "Two-thread adversarial review: a fresh reviewer constructs the strongest 200-word rejection memo, then a second fresh reviewer defends the paper point-by-point and surfaces still-unresolved critical issues. Use when user says \"kill argument\", \"adversarial review\", \"hostile review\", \"rebuttal preparation\", \"reviewer-2 simulation\", or before submitting a theory paper that has already passed standard review rounds."
-argument-hint: [paper-directory]
+argument-hint: "[paper-directory]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, spawn_agent
 ---
 
 # Kill Argument Exercise: Adversarial Attack-Defense Review
+
+> **Codex assurance:** both fresh agents are OpenAI-family, so the base JSON
+> records `review_independence: same-family` and
+> `acceptance_status: provisional`. The mechanical count mapping may drive the
+> next step, but it is not cross-family acceptance. Call failure emits ERROR.
 
 Stress-test the headline claims of a paper against the strongest possible rejection argument: **$ARGUMENTS**
 
@@ -43,7 +48,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 
 ## Constants
 
-- **REVIEWER_MODEL** = `gpt-5.5` (default; specify `gpt-5.4` if you want to fall back to the legacy default).  Reviewer reasoning effort = `xhigh`.
+- **REVIEWER_MODEL** = `gpt-6-astra` (default; specify `gpt-5.4` if you want to fall back to the legacy default). Reviewer reasoning effort = `ultra` for the deep-audit core threads (capability fallback never below `xhigh`).
 - **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `spawn_agent` call.  **Never** use `send_input`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
@@ -52,6 +57,14 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 - **RENDER_HTML = true** — When `true` (default), auto-render `KILL_ARGUMENT.md` to HTML after writing the report via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Uses **full review gate** (audit-class artifact). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the kill-argument verdict.
 
 ## Workflow
+
+The attack and adjudication calls are fresh, read-only Codex shards. They return
+structured per-point records with stable `dedup_key` identifiers; neither call
+writes the paper or emits cross-family acceptance. The parent computes the
+top-level mapping mechanically and records a same-family provisional verdict.
+If `spawn_agent` is unavailable, use fresh sequential contexts where supported;
+otherwise emit `BLOCKED` rather than inventing a verdict. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Step 1: Discover paper files
 
@@ -80,8 +93,8 @@ Invoke `spawn_agent` (NOT `send_input`) with the following prompt structure. Use
 
 ```
 spawn_agent:
-  model: gpt-5.5
-  reasoning_effort: xhigh
+  model: gpt-6-astra
+  reasoning_effort: ultra
   message: |
     You are simulating a hostile NeurIPS / ICLR / ICML reviewer for a paper.
     This is a kill-argument adversarial check — your task is NOT to give a
@@ -138,8 +151,8 @@ Invoke a second `spawn_agent` call (still NOT `send_input` — Thread 2 is indep
 
 ```
 spawn_agent:
-  model: gpt-5.5
-  reasoning_effort: xhigh
+  model: gpt-6-astra
+  reasoning_effort: ultra
   message: |
     You are an independent area-chair adjudicator examining whether the
     current paper text answers a hostile reviewer's rejection memo.
@@ -220,7 +233,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: gpt-5.5 xhigh, fresh agents (no send_input)
+**Reviewer model**: gpt-6-astra ultra, fresh agents (no send_input)
 **Attack agent**: <agent_id 1>
 **Adjudicator agent**: <agent_id 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -266,8 +279,13 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "agent_id": "<defense agent_id — primary; attack agent_id in details>",
-  "reviewer_model": "gpt-5.5",
-  "reviewer_reasoning": "xhigh",
+  "executor_model": "codex-gpt-6-astra",
+  "executor_family": "openai",
+  "reviewer_model": "gpt-6-astra",
+  "reviewer_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "ultra",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_agent_id": "<agent_id 1>",
@@ -307,8 +325,8 @@ paper after running the audit.
 |---|---|---|
 | `FAIL` | `unresolved_critical` | ≥1 `still_unresolved` at `critical` severity |
 | `WARN` | `unresolved_major_or_minor` | ≥1 `still_unresolved` at `major` or `minor` severity (and no `critical`) |
-| `WARN` | `partial_critical_or_repeated_major` | ≥1 `partially_answered` at `critical`, OR ≥2 `partially_answered` at `major` |
-| `PASS` | `defense_survives_with_minor_partial_only` | 0 `still_unresolved`, AND all `partially_answered` are at `minor` severity |
+| `WARN` | `partial_critical_or_repeated_major` | 0 `still_unresolved`, AND ≥1 `partially_answered` at `critical` or `major` |
+| `PASS` | `defense_survives_with_minor_partial_only` | 0 `still_unresolved`, AND ≥1 `partially_answered`, all at `minor` severity |
 | `PASS` | `defense_survives` | 0 `still_unresolved`, AND 0 `partially_answered` |
 | `NOT_APPLICABLE` | `not_theory_or_scope_paper` | Paper has <2 `\begin{theorem\|lemma\|proposition\|corollary}` AND no scope / generality claims in abstract |
 | `NOT_APPLICABLE` | `headline_unstable` | Title or abstract changed within the last 2 commits — re-run after headline stabilizes |
@@ -318,8 +336,9 @@ paper after running the audit.
 | `ERROR` | `decomposition_parse_failed` | Adjudicator thread did not return parseable per-point structure |
 | `ERROR` | `trace_save_failed` | Trace directory write failed |
 
-`PASS` requires `still_unresolved == 0`. Any `partially_answered` at
-`major` or higher → at most `WARN`.
+`PASS` requires `still_unresolved == 0`. With `still_unresolved == 0`, any
+`partially_answered` at `major` or higher makes the best available verdict
+`WARN` — never `PASS`.
 
 The verdict is computed from the per-point counts; do NOT let the
 defense thread output the top-level verdict directly (that would let

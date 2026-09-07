@@ -19,3 +19,12 @@ ROADMAP.md
 
 # Local tooling scratch directory (not part of the project)
 .gstack/
+.coverage
+.coverage.*
+htmlcov/
+
+# Knowledge-graph local artifacts (do not commit)
+/graphify-out/
+
+# Maintainer-local working documents (never part of the public project)
+/deliverables/

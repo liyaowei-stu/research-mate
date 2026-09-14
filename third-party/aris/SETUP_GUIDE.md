@@ -22,24 +22,16 @@ claude --version   # verify installation
 
 Codex CLI is OpenAI's CLI tool — ARIS uses it to call GPT as a cross-model reviewer. See the [Codex CLI docs](https://developers.openai.com/codex) for installation.
 
-After installing, authenticate Codex (one-time, opens a browser to log in to ChatGPT) and register it as a Claude Code MCP server:
+After installing, authenticate Codex (one-time, opens a browser to log in to ChatGPT):
 
 ```bash
 codex --version   # verify installation
 codex login       # one-time ChatGPT auth (skip if already logged in)
-claude mcp add codex -s user -- codex mcp-server
 ```
 
-- `codex` (after `add`) — the registered name. ARIS skills hardcode this name, **do not change it**
-- `-s user` — applies globally to all projects
-- `codex mcp-server` — built-in subcommand that starts the MCP server mode
+The MCP registration that lets Claude Code call Codex is the last line of [Step 3.1](#31-install-skills) — it needs the ARIS clone, which does not exist yet.
 
-Restart Claude Code after registration. Verify:
-
-```bash
-claude mcp list | grep codex
-# should show: codex: codex mcp-server - ✓ Connected
-```
+> **⚠️ Important**: After registering or modifying any MCP server, you **must restart Claude Code** for the change to take effect. MCP configurations are loaded at startup. For additional MCP servers needed by alternative model combinations, see [Step 3.2](#32-register-mcp-servers-optional).
 
 ### 1.3 LaTeX Environment (Optional)
 
@@ -66,7 +58,9 @@ touch CLAUDE.md
 - `git init` — some skills need git to locate the project root
 - `CLAUDE.md` — Claude Code's project config file; the install script will write ARIS info into it
 
-## Step 3: Install Skills
+## Step 3: Install Skills and Configure MCP
+
+### 3.1 Install Skills
 
 Install ARIS skills into your project via symlinks (the recommended project-local install method):
 
@@ -78,9 +72,30 @@ git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git ~
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 
+# Install only what you need (selective install):
+bash ~/aris_repo/tools/install_aris.sh --list-groups                  # show the 10 skill groups
+bash ~/aris_repo/tools/install_aris.sh --groups paper-core,lit-search # install by group
+bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # by skill (hard deps auto-included)
+# A fresh install with no selection flags (run in a terminal) opens a checkbox picker (Space toggles, group rows toggle all)
+
 # Other useful flags:
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # preview install plan, no changes
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # uninstall per manifest, leaves other files intact
+
+# 3. Register ARIS's Codex MCP server in Claude Code (once, global):
+claude mcp remove codex -s user 2>/dev/null   # drop an older `codex mcp-server` registration, if you have one
+claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"
+```
+
+- `codex` (after `add`) — the registered name. ARIS skills hardcode this name, **do not change it**
+- `-s user` — applies globally to all projects
+- `python3 .../mcp-servers/codex-exec/server.py` — ARIS's own MCP server for Codex, driving `codex exec` underneath; use the absolute path of your clone. codex-cli 0.154 removed the built-in `codex mcp-server`; on 0.153 or older this bridge works the same way, so register it regardless of version
+
+Restart Claude Code after registration, then verify:
+
+```bash
+claude mcp list | grep codex
+# should show: codex: python3 .../codex-exec/server.py - ✓ Connected
 ```
 
 The script shows an install plan and asks for confirmation (type `y`). See [`install_aris.sh`](tools/install_aris.sh):
@@ -105,6 +120,23 @@ cd ~/aris_repo && git pull
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 ```
+
+### 3.2 Register MCP Servers (Optional)
+
+Depending on your model combination, you may need to register additional MCP servers beyond the default `codex` registered in Step 1.2. ARIS ships the following MCP servers:
+
+| MCP Server | Registered Into | Required When | Registration Method |
+|---|---|---|---|
+| `codex` | Claude Code | Default setup (Claude + GPT review) | `claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"` (already done in Step 3.1) |
+| `claude-review` | Codex CLI | Using Codex as executor with Claude as reviewer | `codex mcp add claude-review -- python3 ~/.codex/mcp-servers/claude-review/server.py` (see `mcp-servers/claude-review/README.md`) |
+| `gemini-review` | Codex CLI | Using Codex as executor with Gemini as reviewer | `codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/mcp-servers/gemini-review/server.py` (see `mcp-servers/gemini-review/README.md`) |
+| `llm-chat` | Claude Code | Using arbitrary OpenAI-compatible API as reviewer | `claude mcp add llm-chat -s user -- python3 /path/to/aris_repo/mcp-servers/llm-chat/server.py` (see `docs/LLM_API_MIX_MATCH_GUIDE.md`) |
+| `minimax-chat` | Claude Code | Using MiniMax as reviewer (no OpenAI key needed) | See `docs/MINIMAX_MCP_GUIDE.md` |
+| `manual-review` | Claude Code | Human-in-the-loop manual review | `claude mcp add manual-review -s user -- python3 /path/to/aris_repo/mcp-servers/manual-review/server.py` |
+| `feishu-bridge` | — (standalone HTTP service) | Receiving notifications via Feishu/飞书 | See `mcp-servers/feishu-bridge/` |
+| `codex-image2` | Claude Code | Enhanced image processing in Codex | See `mcp-servers/codex-image2/` |
+
+> **⚠️ Important**: After registering or modifying any MCP server, you **must restart Claude Code** for the changes to take effect. MCP configurations are loaded at startup. Correct order: register all needed MCP servers → restart Claude Code → start using ARIS workflows.
 
 ## Step 4: Configure GPU Server
 
@@ -165,6 +197,8 @@ Should output Python version, PyTorch version, and GPU count.
 
 Research Wiki is ARIS's core knowledge base — it automatically accumulates papers you've read, ideas you've generated, and experiments you've run. Other skills write to it automatically; you don't need to maintain it manually.
 
+> **⚠️ If you haven't restarted Claude Code after MCP registration in Step 3.2, do it now** — MCP servers are loaded at startup and won't be available without a restart.
+
 Open Claude Code in your research project directory and enter:
 
 ```
@@ -188,7 +222,16 @@ research-wiki/
 
 ## Step 6: Verify
 
-Restart Claude Code and test in your research project directory:
+Restart Claude Code and test in your research project directory.
+
+**In your terminal:** verify MCP servers are connected:
+
+```bash
+claude mcp list          # all Claude Code MCP servers should show ✓ Connected
+codex mcp list           # Codex CLI MCP servers (if applicable)
+```
+
+**In Claude Code:**
 
 **1. Test MCP connectivity** — enter in Claude Code:
 

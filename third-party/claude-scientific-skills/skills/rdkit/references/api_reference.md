@@ -24,7 +24,7 @@ The fundamental module for working with molecules.
 **Writing Molecules:**
 
 - `Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True)` - Convert to SMILES
-- `Chem.MolToSmarts(mol, isomericSmarts=False)` - Convert to SMARTS
+- `Chem.MolToSmarts(mol, isomericSmiles=False)` - Convert to SMARTS
 - `Chem.MolToMolBlock(mol, includeStereo=True, confId=-1)` - Convert to MOL block
 - `Chem.MolToMolFile(mol, filename, includeStereo=True, confId=-1)` - Write MOL file
 - `Chem.MolToPDBBlock(mol, confId=-1)` - Convert to PDB block
@@ -249,7 +249,7 @@ Additional descriptor calculations.
 - `rdMolDescriptors.CalcNumAromaticHeterocycles(mol)` - Aromatic heterocycles
 - `rdMolDescriptors.CalcNumSpiroAtoms(mol)` - Spiro atoms
 - `rdMolDescriptors.CalcNumBridgeheadAtoms(mol)` - Bridgehead atoms
-- `rdMolDescriptors.CalcFractionCsp3(mol)` - Fraction of sp3 carbons
+- `rdMolDescriptors.CalcFractionCSP3(mol)` - Fraction of sp3 carbons
 - `rdMolDescriptors.CalcLabuteASA(mol)` - Labute accessible surface area
 - `rdMolDescriptors.CalcTPSA(mol)` - TPSA
 - `rdMolDescriptors.CalcMolFormula(mol)` - Molecular formula

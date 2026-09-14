@@ -1,6 +1,6 @@
 # ARS Performance Notes
 
-> **Recommended model: the current frontier Claude model** (Fable 5 at the time of writing) with **Max plan** (or equivalent configuration). Current Claude models use adaptive thinking; you no longer set a fixed thinking budget.
+> **Recommended model: the current frontier Claude model** (Fable 5.1 at the time of writing) with **Max plan** (or equivalent configuration). Current Claude models use adaptive thinking; you no longer set a fixed thinking budget.
 >
 > The full academic pipeline (10 stages) consumes a **large amount of tokens** — a single end-to-end run can exceed 200K input + 100K output tokens depending on paper length and revision rounds. Budget accordingly.
 >
@@ -22,6 +22,8 @@
 
 *Estimates based on a ~15,000-word paper with ~60 references. Actual usage varies with paper length, revision rounds, and dialogue depth. Costs measured on Opus 4.x at Anthropic API pricing as of April 2026 — treat as order-of-magnitude anchors under newer models rather than exact quotes.*
 
+> **Fable 5.1 re-derivation (2026-09).** At Claude Fable 5.1 list pricing as of 2026-09 (US$10 / US$50 per million input / output tokens), the full-pipeline token figures above (~200K in + ~100K out) come to roughly **~$7** per run — arithmetic on the token columns, not a re-measurement: no pipeline run has been re-timed on Fable 5.1. Fable 5.1 also always reasons (thinking cannot be disabled), so dialogue-heavy modes may spend more output tokens than the Opus 4.x rows recorded.
+
 > **v3.11 citation verification (#182).** The deterministic citation-existence gate calls external bibliographic APIs (Semantic Scholar / OpenAlex / Crossref / arXiv), not the LLM, so it adds **no Claude token cost** to the figures above — only network latency on first lookup. The persistent SQLite cache (`~/.cache/ars/verification.db`, 90-day TTL) means each paper is verified once and reused across drafts; a re-run over an already-cached bibliography does no network work. See [SETUP](SETUP.md#citation-verification-cache-v3.11-182).
 
 ## Recommended Claude Code settings
@@ -29,9 +31,10 @@
 | Setting | What it does | How to enable | Docs |
 |---|---|---|---|
 | **Agent Team** (optional) | Enables `TeamCreate` / `SendMessage` tools for manual multi-agent coordination. **ARS's internal parallelization does not require this flag** — skills spawn subagents via the built-in `Agent` tool directly. Only useful if you want to manually orchestrate persistent team workflows across sessions. | Set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` (research preview) | Experimental feature — no stable docs yet |
-| **Skip Permissions** | Bypasses per-tool confirmation prompts, enabling uninterrupted autonomous execution across all pipeline stages | Launch with `claude --dangerously-skip-permissions` | [Permissions](https://docs.anthropic.com/en/docs/claude-code/cli-reference) · [Advanced Usage](https://docs.anthropic.com/en/docs/claude-code/advanced) |
+| **Auto mode** (recommended) | Auto-accepts most tool actions so long pipeline runs keep moving, while a server-side classifier still blocks actions that escalate beyond what you asked for (e.g. production deploys, force-pushes or direct pushes to main, data exfiltration). Explicit ask rules and classifier blocks can still prompt. The middle ground between manual approval and zero checks. | Launch with `claude --permission-mode auto` (when available), or set `"permissions": { "defaultMode": "auto" }` in `~/.claude/settings.json`; verify the active mode after startup (research preview) | [Permission modes](https://code.claude.com/docs/en/permission-modes) |
+| **Skip Permissions** | Skips routine tool-use confirmations with no safety checks. Faster than auto mode but removes all guardrails. Intended for ephemeral isolated sandboxes without internet access, not real development machines. | Launch with `claude --dangerously-skip-permissions` (equivalent to `--permission-mode bypassPermissions`) | [Permission modes](https://code.claude.com/docs/en/permission-modes) |
 
-> **⚠️ Skip Permissions**: This flag disables all tool-use confirmation dialogs. Use at your own discretion — it is convenient for trusted, long-running pipelines but removes the safety net of manual approval. Only enable this in environments where you are comfortable with Claude executing file reads, writes, and shell commands without asking first.
+> **⚠️ Choosing a mode**: For most unattended pipeline runs, auto mode is the recommended setting. It keeps most long runs moving while a classifier gates dangerous escalations, though ask rules and classifier blocks can still prompt. Auto mode is a research preview: it does not guarantee safety and is not a replacement for human review on sensitive operations, and its behavior may change. Skip Permissions removes that safety net entirely and should only be used in an isolated sandbox without internet access, where you are comfortable with Claude executing file reads, writes, and shell commands with no checks.
 
 ### v3.7.0 Plugin agents and model routing
 
@@ -41,9 +44,11 @@ When ARS is installed as a Claude Code plugin (`/plugin install academic-researc
 - A Sonnet session gets Sonnet agents, matching the cost/latency profile of the parent run.
 - The agents never silently fall back to Haiku — `inherit` resolves through the parent session's model, which is itself gated by the project policy of "no Haiku for ARS runs."
 
-This means **plugin-agent token costs track the per-mode estimates above unchanged**; there is no separate plugin agent surcharge or discount, because dispatched agents inherit the same model the parent run already pays for. If you change the main session model mid-pipeline (e.g., downshift to Sonnet for a long revision pass), the next agent dispatch picks up the new floor automatically.
+Since #514 (shipped in #521), each of the three also carries a pinned tools allowlist in the same frontmatter — `tools: Read, Write, Edit, Grep, Glob`, no shell and no network fetch — so dispatch-time capability is least-privilege; the exact value is CI-locked by `scripts/check_tools_allowlist.py` (#524).
 
-Other ARS agents (`bibliography_agent`, `literature_strategist_agent`, etc.) are not plugin-exposed in v3.7.0; they remain in-skill prompt templates that the main session executes inline, with no separate model routing layer. Wider plugin-agent coverage is deferred to a future release.
+This means **plugin-agent token costs track the per-mode estimates above unchanged** (with `ARS_MODEL_TIERING` unset); there is no separate plugin agent surcharge or discount, because dispatched agents inherit the same model the parent run already pays for. Under `ARS_MODEL_TIERING=economy`, plugin-exposed execution-type agents (e.g. `report_compiler_agent`) follow the tiering rule instead — one tier below the session model, floor Opus-class (see `shared/model_tiering.md`). If you change the main session model mid-pipeline (e.g., downshift to Sonnet for a long revision pass), the next agent dispatch picks up the new floor automatically.
+
+Other ARS agents (`bibliography_agent`, `literature_strategist_agent`, etc.) are not plugin-exposed in v3.7.0; they remain in-skill prompt templates that the main session executes inline, with no separate model routing layer **by default**. The opt-in `ARS_MODEL_TIERING` switch (#517) adds a dispatch-time routing rule on top: when a tiering direction applies to a role, the session dispatches it as a subagent pinned to the target tier (inline roles included — dispatch-as-subagent is the mechanism); with the flag unset, this paragraph describes behavior unchanged. See `shared/model_tiering.md`. Wider plugin-agent coverage is deferred to a future release.
 
 ## Long-running session management
 
@@ -59,7 +64,7 @@ The Schema 13 sprint contract gate splits each reviewer agent's run into Phase 1
 | Skill / Mode | Effect on tokens | Notes |
 |---|---|---|
 | `academic-paper-reviewer full` | ~+30-40% input + small output bump per reviewer × 5 reviewers | Each reviewer reads the contract template + paper metadata in Phase 1, then full paper in Phase 2 |
-| `academic-paper-reviewer methodology-focus` | Same shape, panel 2 | Two reviewers (EIC + methodology) each run two phases |
+| `academic-paper-reviewer methodology-focus` | Same shape, panel 2 | Two reviewers (Journal-Fit Reviewer + methodology) each run two phases |
 | Synthesizer (always one) | +~2-3K input | Reads contract + reviewer outputs to run three-step mechanical protocol |
 
 Empirical measurement pending real review runs at scale. The two-phase shape is non-optional for the gated modes; treat as fixed overhead, not a tunable.

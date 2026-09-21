@@ -8,12 +8,13 @@
  * - `run_experiment` tool — runs any command, times it, captures output, detects pass/fail
  * - `log_experiment` tool — records results with session-persisted state
  * - Status widget showing experiment count + best metric
- * - Configurable shortcut to open the fullscreen dashboard overlay
+ * - Fullscreen dashboard overlay via /autoresearch dashboard (opt-in shortcuts available)
  * - Adds autoresearch guidance to the system prompt and points the agent at .auto/prompt.md
  * - Injects .auto/prompt.md into context on every turn via before_agent_start
  */
 
 import type {
+  CustomEntry,
   ExtensionAPI,
   ExtensionContext,
   SessionBeforeCompactEvent,
@@ -50,7 +51,7 @@ import {
   autoresearchSummaryPathsFor,
   buildAutoresearchCompactionSummary,
 } from "./compaction.ts";
-import { resolveAutoresearchShortcuts } from "./shortcuts.ts";
+import { resolveAutoresearchShortcuts, SHORTCUT_ACTIONS } from "./shortcuts.ts";
 import { sessionFilePath, sessionFileCandidates, ensureParentDir, AUTO_DIR } from "./paths.ts";
 
 // ---------------------------------------------------------------------------
@@ -108,6 +109,41 @@ interface ExperimentState {
   maxExperiments: number | null;
   /** Current session confidence score (best improvement / noise floor). null if insufficient data. */
   confidence: number | null;
+}
+
+export const AUTORESUME_TURN_LIMIT = 200;
+export const CONSECUTIVE_FAILURE_OVERRIDE_LIMIT = 20;
+
+type AutoResumeGuardState = Pick<ExperimentState, "results" | "currentSegment">;
+type AutoResumeGuardRuntime = {
+  autoResumeTurns: number;
+  state: AutoResumeGuardState;
+};
+
+/** Count trailing discard/crash results in the current segment. */
+export function countConsecutiveDiscardOrCrashResults(state: AutoResumeGuardState): number {
+  let count = 0;
+  for (let i = state.results.length - 1; i >= 0; i--) {
+    const result = state.results[i];
+    if (result.segment !== state.currentSegment) break;
+    if (result.status === "discard" || result.status === "crash") {
+      count++;
+      continue;
+    }
+    break;
+  }
+  return count;
+}
+
+export function autoResumeStopReasonFor(runtime: AutoResumeGuardRuntime): string | null {
+  if (runtime.autoResumeTurns >= AUTORESUME_TURN_LIMIT) {
+    return `Autoresearch auto-resume limit reached (${AUTORESUME_TURN_LIMIT} turns)`;
+  }
+  const failures = countConsecutiveDiscardOrCrashResults(runtime.state);
+  if (failures > CONSECUTIVE_FAILURE_OVERRIDE_LIMIT) {
+    return `Autoresearch auto-resume stopped — ${failures} consecutive discards/crashes`;
+  }
+  return null;
 }
 
 interface RunDetails {
@@ -460,6 +496,66 @@ function resolveWorkDir(ctxCwd: string): string {
   return path.isAbsolute(config.workingDir)
     ? config.workingDir
     : path.resolve(ctxCwd, config.workingDir);
+}
+
+function canonicalPath(existingPath: string): string {
+  try {
+    return fs.realpathSync.native(existingPath);
+  } catch {
+    return path.resolve(existingPath);
+  }
+}
+
+function samePath(a: string, b: string): boolean {
+  return canonicalPath(a) === canonicalPath(b);
+}
+
+const AUTORESEARCH_ACTIVATION_ENTRY = "pi-autoresearch.activation";
+
+interface AutoresearchActivationEntryData {
+  version?: number;
+  workDir?: string;
+  active?: boolean;
+}
+
+export function shouldAutoActivateAutoresearch(
+  ctxCwd: string,
+  workDir: string,
+  hasPersistedLog: boolean,
+  recordedDecision: boolean | null = null,
+): boolean {
+  if (!hasPersistedLog) return false;
+  // An explicit `/autoresearch on|off` in this session always wins, so a manual
+  // off survives /tree, compaction, and reloads instead of snapping back on.
+  if (recordedDecision !== null) return recordedDecision;
+  // With no recorded decision, same-cwd sessions default on (a log implies intent);
+  // redirected workingDir sessions default off until this session opts in.
+  return samePath(ctxCwd, workDir);
+}
+
+function autoresearchActivationData(entry: CustomEntry): AutoresearchActivationEntryData | null {
+  if (entry.customType !== AUTORESEARCH_ACTIVATION_ENTRY) return null;
+
+  const data = entry.data as AutoresearchActivationEntryData | undefined;
+  if (typeof data?.workDir !== "string") return null;
+
+  return data;
+}
+
+function recordedActivationDecision(ctx: ExtensionContext, workDir: string): boolean | null {
+  const canonicalWorkDir = canonicalPath(workDir);
+  let decision: boolean | null = null;
+
+  for (const entry of ctx.sessionManager.getBranch()) {
+    if (entry.type !== "custom") continue;
+
+    const data = autoresearchActivationData(entry);
+    if (!data || canonicalPath(data.workDir) !== canonicalWorkDir) continue;
+
+    decision = data.active === true;
+  }
+
+  return decision;
 }
 
 /**
@@ -970,7 +1066,6 @@ function renderDashboardLines(
 // ---------------------------------------------------------------------------
 
 export default function autoresearchExtension(pi: ExtensionAPI) {
-  const MAX_AUTORESUME_TURNS = 20;
   const BENCHMARK_GUARDRAIL =
     "Be careful not to overfit to the benchmarks and do not cheat on the benchmarks.";
 
@@ -980,11 +1075,13 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   const shortcuts = resolveAutoresearchShortcuts();
 
   const dashboardHintVariants = (): string[] => {
-    if (!shortcuts.fullscreenDashboard) return [];
-    return [
-      `${shortcuts.fullscreenDashboard} fullscreen`,
-      shortcuts.fullscreenDashboard,
-    ];
+    if (shortcuts.fullscreenDashboard) {
+      return [
+        `${shortcuts.fullscreenDashboard} fullscreen`,
+        shortcuts.fullscreenDashboard,
+      ];
+    }
+    return ["/autoresearch dashboard fullscreen", "/autoresearch dashboard"];
   };
 
   const runtimeStore = createRuntimeStore();
@@ -1007,6 +1104,14 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       enabled ? activeTools.add(tool) : activeTools.delete(tool);
     }
     pi.setActiveTools([...activeTools]);
+  };
+
+  const recordAutoresearchActivation = (workDir: string, active: boolean): void => {
+    pi.appendEntry(AUTORESEARCH_ACTIVATION_ENTRY, {
+      version: 1,
+      workDir: canonicalPath(workDir),
+      active,
+    });
   };
 
   const isAgentSettled = (ctx: ExtensionContext): boolean =>
@@ -1039,9 +1144,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       return;
     }
     if (!isAgentSettled(ctx)) return;
-    if (hasReachedAutoResumeLimit(runtime)) {
+    const stopReason = autoResumeStopReasonFor(runtime);
+    if (stopReason !== null) {
       cancelPendingResume(runtime);
-      notifyAutoResumeLimitReached(ctx);
+      notifyAutoResumeLimitReached(ctx, stopReason);
       return;
     }
 
@@ -1075,14 +1181,8 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   const shouldAutoResumeAfterCompact = (runtime: AutoresearchRuntime): boolean =>
     runtime.autoresearchMode;
 
-  const hasReachedAutoResumeLimit = (runtime: AutoresearchRuntime): boolean =>
-    runtime.autoResumeTurns >= MAX_AUTORESUME_TURNS;
-
-  const notifyAutoResumeLimitReached = (ctx: ExtensionContext): void => {
-    ctx.ui.notify(
-      `Autoresearch auto-resume limit reached (${MAX_AUTORESUME_TURNS} turns)`,
-      "info",
-    );
+  const notifyAutoResumeLimitReached = (ctx: ExtensionContext, reason?: string | null): void => {
+    ctx.ui.notify(reason ?? `Autoresearch auto-resume limit reached`, "info");
   };
 
   const composeResumeMessage = (_ctx: ExtensionContext): string => {
@@ -1120,12 +1220,13 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     };
   };
 
+  // Without `expandPromptTemplates` a `/skill:<name>` kickoff reaches the model as literal text.
   const sendWhenReady = (ctx: ExtensionContext, message: string): void => {
     if (ctx.isIdle()) {
-      pi.sendUserMessage(message);
+      pi.sendUserMessage(message, { expandPromptTemplates: true });
       return;
     }
-    pi.sendUserMessage(message, { deliverAs: "followUp" });
+    pi.sendUserMessage(message, { expandPromptTemplates: true, deliverAs: "followUp" });
   };
 
   const hasAutoresearchRules = (ctx: ExtensionContext): boolean =>
@@ -1185,18 +1286,20 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
   const autoresearchHelp = () =>
     [
-      "Usage: /autoresearch [off|clear|export|<text>]",
+      "Usage: /autoresearch [off|clear|export|dashboard|<text>]",
       "",
       "<text> enters autoresearch mode and starts or resumes the loop.",
       "off leaves autoresearch mode.",
       "clear deletes the session log (.auto/log.jsonl) and turns autoresearch mode off.",
       "export opens a local live dashboard for the session log in your browser.",
+      "dashboard opens the fullscreen dashboard overlay in the terminal.",
 
       "",
       "Examples:",
       "  /autoresearch optimize unit test runtime, monitor correctness",
       "  /autoresearch model training, run 5 minutes of train.py and note the loss ratio as optimization target",
       "  /autoresearch export",
+      "  /autoresearch dashboard",
     ].join("\n");
 
   // -----------------------------------------------------------------------
@@ -1220,9 +1323,10 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
     // Primary: read from .auto/log.jsonl (alongside .auto/prompt.md and .auto/measure.sh)
     const jsonlPath = autoresearchJsonlPath(workDir);
+    const hasPersistedLog = fs.existsSync(jsonlPath);
     let loadedFromJsonl = false;
     try {
-      if (fs.existsSync(jsonlPath)) {
+      if (hasPersistedLog) {
         const reconstructed = reconstructJsonlState(fs.readFileSync(jsonlPath, "utf-8"));
         state.name = reconstructed.name;
         state.metricName = reconstructed.metricName;
@@ -1275,8 +1379,19 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
     // Read max experiments from config file
     state.maxExperiments = readMaxExperiments(ctx.cwd);
 
-    // Auto-enter autoresearch mode only when a persisted experiment log exists
-    setAutoresearchMode(ctx, fs.existsSync(autoresearchJsonlPath(workDir)));
+    // Auto-enter autoresearch mode only when a persisted experiment log exists.
+    // A recorded `/autoresearch on|off` in this session wins; otherwise same-cwd
+    // sessions default on and redirected workingDir sessions default off, so
+    // unrelated chats launched from a shared cwd never activate it.
+    setAutoresearchMode(
+      ctx,
+      shouldAutoActivateAutoresearch(
+        ctx.cwd,
+        workDir,
+        hasPersistedLog,
+        recordedActivationDecision(ctx, workDir),
+      ),
+    );
 
     updateWidget(ctx);
   };
@@ -1286,6 +1401,11 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
 
     const runtime = getRuntime(ctx);
     const state = runtime.state;
+
+    if (!runtime.autoresearchMode) {
+      ctx.ui.setWidget("autoresearch", undefined);
+      return;
+    }
 
     if (state.results.length === 0) {
       if (!runtime.runningExperiment) {
@@ -1375,8 +1495,9 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       return;
     }
     if (!gate(runtime)) return;
-    if (hasReachedAutoResumeLimit(runtime)) {
-      notifyAutoResumeLimitReached(ctx);
+    const stopReason = autoResumeStopReasonFor(runtime);
+    if (stopReason !== null) {
+      notifyAutoResumeLimitReached(ctx, stopReason);
       return;
     }
     schedulePendingResume(ctx, runtime, composeMessage(ctx));
@@ -1520,6 +1641,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       }
 
       const wasInactive = !runtime.autoresearchMode;
+      recordAutoresearchActivation(workDir, true);
       setAutoresearchMode(ctx, true);
       updateWidget(ctx);
 
@@ -2092,6 +2214,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       "log_experiment reports a confidence score after 3+ runs (best improvement as a multiple of the noise floor). ≥2.0× = likely real, <1.0× = within noise. If confidence is below 1.0×, consider re-running the same experiment to confirm before keeping. The score is advisory — it never auto-discards.",
       "If you discover complex but promising optimizations you won't pursue immediately, append them as bullet points to .auto/ideas.md. Don't let good ideas get lost.",
       "Always include the asi parameter. At minimum: {\"hypothesis\": \"what you tried\"}. On discard/crash, also include rollback_reason and next_action_hint. Add any other key/value pairs that capture what you learned — dead ends, surprising findings, error details, bottlenecks. This is the only structured memory that survives reverts.",
+      "When log_experiment records a retry of a previously discarded idea after its assumptions changed, set asi.revisits_run to the earlier run number (a positive integer) and explain what changed in description. Omit revisits_run for new ideas and verification reruns.",
     ],
     parameters: LogParams,
 
@@ -2346,9 +2469,11 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       const limitReached = state.maxExperiments !== null && segmentCount >= state.maxExperiments;
       if (limitReached) {
         text += `\n\n🛑 Maximum experiments reached (${state.maxExperiments}). STOP the experiment loop now.`;
+        recordAutoresearchActivation(workDir, false);
         setAutoresearchMode(ctx, false);
         ctx.abort();
       } else if (runtime.autoresearchMode) {
+        text += "\n\nBefore choosing the next experiment, consider whether this result or discovery invalidates a previous discard's rollback reason. If so, name what changed and weigh a targeted retry against other candidates. Otherwise, move on. Don't revive a discarded idea without a changed assumption. Verification reruns to resolve measurement noise are separate.";
         const beforeSteer = await fireHook({
           event: "before",
           cwd: workDir,
@@ -2446,153 +2571,197 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
         text += theme.fg("dim", `  ${parts.join(" ")}`);
       }
 
+      const revisitsRun = exp.asi?.revisits_run;
+      if (typeof revisitsRun === "number" && Number.isInteger(revisitsRun) && revisitsRun > 0) {
+        text += "\n" + theme.fg("accent", `↻ Revisiting #${revisitsRun}`);
+      }
+
       return new Text(text, 0, 0);
     },
   });
 
   // -----------------------------------------------------------------------
-  // Fullscreen scrollable dashboard overlay shortcut
+  // Fullscreen scrollable dashboard overlay
   // -----------------------------------------------------------------------
 
-  if (shortcuts.fullscreenDashboard) {
-    pi.registerShortcut(shortcuts.fullscreenDashboard, {
-      description: "Fullscreen autoresearch dashboard",
-      handler: async (ctx) => {
-        const runtime = getRuntime(ctx);
-        const state = runtime.state;
-        if (state.results.length === 0) {
-          ctx.ui.notify("No experiments yet", "info");
-          return;
+  function canOpenFullscreenDashboard(ctx: ExtensionContext): boolean {
+    const mode = (ctx as ExtensionContext & { mode?: string }).mode;
+    return mode === undefined ? ctx.hasUI : mode === "tui";
+  }
+
+  async function openFullscreenDashboard(ctx: ExtensionContext): Promise<void> {
+    if (!canOpenFullscreenDashboard(ctx)) {
+      ctx.ui.notify("The fullscreen dashboard is only available in TUI mode", "info");
+      return;
+    }
+
+    const runtime = getRuntime(ctx);
+    const state = runtime.state;
+    if (!runtime.autoresearchMode) {
+      ctx.ui.notify("Autoresearch mode is not active", "info");
+      return;
+    }
+    if (state.results.length === 0) {
+      ctx.ui.notify("No experiments yet", "info");
+      return;
+    }
+
+    await ctx.ui.custom<void>(
+      (tui, theme, _kb, done) => {
+      let scrollOffset = 0;
+      let lastViewportRows = 8;
+      let lastTotalRows = 0;
+      overlayTui = tui;
+
+      spinnerInterval = setInterval(() => {
+        spinnerFrame = (spinnerFrame + 1) % SPINNER.length;
+        if (runtime.runningExperiment) tui.requestRender();
+      }, 80);
+
+      const buildOverlayContent = (renderWidth: number): string[] => {
+        const content = renderDashboardLines(state, renderWidth, theme, 0);
+        if (runtime.runningExperiment) {
+          const elapsed = formatElapsed(Date.now() - runtime.runningExperiment.startedAt);
+          const frame = SPINNER[spinnerFrame % SPINNER.length];
+          const nextIdx = state.results.length + 1;
+          content.push(
+            truncateToWidth(
+              `  ${theme.fg("dim", String(nextIdx).padEnd(3))}` +
+                theme.fg("warning", `${frame} running… ${elapsed}`),
+              renderWidth,
+              "…",
+              true
+            )
+          );
         }
+        return content;
+      };
 
-        await ctx.ui.custom<void>(
-          (tui, theme, _kb, done) => {
-          let scrollOffset = 0;
-          let lastViewportRows = 8;
-          let lastTotalRows = 0;
-          overlayTui = tui;
+      return {
+        render(width: number): string[] {
+          const { height } = getTuiSize(tui);
+          const safeWidth = Math.max(1, width || getTuiSize(tui).width);
+          // Match overlayOptions.maxHeight so pi doesn't clip the footer.
+          const overlayRows = Math.max(4, Math.floor(height * 0.9));
+          const viewportRows = Math.max(1, overlayRows - 3);
+          const content = buildOverlayContent(Math.max(4, safeWidth - 2));
 
-          spinnerInterval = setInterval(() => {
-            spinnerFrame = (spinnerFrame + 1) % SPINNER.length;
-            if (runtime.runningExperiment) tui.requestRender();
-          }, 80);
+          const totalRows = content.length;
+          const maxScroll = Math.max(0, totalRows - viewportRows);
+          scrollOffset = clamp(scrollOffset, 0, maxScroll);
+          lastViewportRows = viewportRows;
+          lastTotalRows = totalRows;
 
-          const buildOverlayContent = (renderWidth: number): string[] => {
-            const content = renderDashboardLines(state, renderWidth, theme, 0);
-            if (runtime.runningExperiment) {
-              const elapsed = formatElapsed(Date.now() - runtime.runningExperiment.startedAt);
-              const frame = SPINNER[spinnerFrame % SPINNER.length];
-              const nextIdx = state.results.length + 1;
-              content.push(
-                truncateToWidth(
-                  `  ${theme.fg("dim", String(nextIdx).padEnd(3))}` +
-                    theme.fg("warning", `${frame} running… ${elapsed}`),
-                  renderWidth,
-                  "…",
-                  true
-                )
-              );
-            }
-            return content;
+          const out: string[] = [];
+
+          // Full box border: the overlay floats over the transcript, so every
+          // row must be padded to full width or the background bleeds through.
+          const innerWidth = Math.max(4, safeWidth - 2);
+          const border = (text: string) => theme.fg("border", text);
+          const boxRow = (line: string): string => {
+            const clipped = truncateToWidth(line, innerWidth, "…", true);
+            const pad = " ".repeat(Math.max(0, innerWidth - visibleWidth(clipped)));
+            return border("│") + clipped + pad + border("│");
           };
 
-          return {
-            render(width: number): string[] {
-              const { height } = getTuiSize(tui);
-              const safeWidth = Math.max(1, width || getTuiSize(tui).width);
-              const viewportRows = Math.max(4, height - 4);
-              const content = buildOverlayContent(safeWidth);
+          const title = truncateDisplayText(
+            `🔬 autoresearch${state.name ? `: ${state.name}` : ""}`,
+            Math.max(0, innerWidth - 2)
+          );
 
-              const totalRows = content.length;
-              const maxScroll = Math.max(0, totalRows - viewportRows);
-              scrollOffset = clamp(scrollOffset, 0, maxScroll);
-              lastViewportRows = viewportRows;
-              lastTotalRows = totalRows;
+          out.push(border(`╭${"─".repeat(innerWidth)}╮`));
+          out.push(boxRow(` ${theme.fg("accent", title)}`));
 
-              const out: string[] = [];
+          const visible = content.slice(scrollOffset, scrollOffset + viewportRows);
+          for (const line of visible) out.push(boxRow(line));
+          for (let i = visible.length; i < viewportRows; i++) out.push(boxRow(""));
 
-              const title = truncateDisplayText(
-                `🔬 autoresearch${state.name ? `: ${state.name}` : ""}`,
-                Math.max(0, safeWidth - 5)
-              );
-              const fillLen = Math.max(0, safeWidth - 3 - 1 - visibleWidth(title) - 1);
+          const scrollInfo = totalRows > viewportRows
+            ? ` ${scrollOffset + 1}-${Math.min(scrollOffset + viewportRows, totalRows)}/${totalRows}`
+            : "";
+          const helpText = safeWidth >= 85
+            ? ` ↑↓/j/k scroll • pgup/pgdn • g/G • esc close${scrollInfo} `
+            : ` j/k scroll • esc close${scrollInfo} `;
+          const footFill = Math.max(0, safeWidth - 2 - visibleWidth(helpText));
 
-              out.push(
-                truncateToWidth(
-                  theme.fg("borderMuted", "───") +
-                    theme.fg("accent", ` ${title} `) +
-                    theme.fg("borderMuted", "─".repeat(fillLen)),
-                  safeWidth,
-                  "…",
-                  true
-                )
-              );
+          out.push(
+            truncateToWidth(
+              border("╰" + "─".repeat(footFill)) + theme.fg("dim", helpText) + border("╯"),
+              safeWidth,
+              "…",
+              true
+            )
+          );
 
-              const visible = content.slice(scrollOffset, scrollOffset + viewportRows);
-              for (const line of visible) out.push(truncateToWidth(line, safeWidth, "…", true));
-              for (let i = visible.length; i < viewportRows; i++) out.push("");
+          return out;
+        },
 
-              const scrollInfo = totalRows > viewportRows
-                ? ` ${scrollOffset + 1}-${Math.min(scrollOffset + viewportRows, totalRows)}/${totalRows}`
-                : "";
-              const helpText = safeWidth >= 85
-                ? ` ↑↓/j/k scroll • pgup/pgdn • g/G • esc close${scrollInfo} `
-                : ` j/k scroll • esc close${scrollInfo} `;
-              const footFill = Math.max(0, safeWidth - visibleWidth(helpText));
+        handleInput(data: string): void {
+          const maxScroll = Math.max(0, lastTotalRows - lastViewportRows);
 
-              out.push(
-                truncateToWidth(
-                  theme.fg("borderMuted", "─".repeat(footFill)) + theme.fg("dim", helpText),
-                  safeWidth,
-                  "…",
-                  true
-                )
-              );
-
-              return out;
-            },
-
-            handleInput(data: string): void {
-              const maxScroll = Math.max(0, lastTotalRows - lastViewportRows);
-
-              if (matchesKey(data, "escape") || data === "q") {
-                done(undefined);
-                return;
-              }
-              if (matchesKey(data, "up") || data === "k") {
-                scrollOffset = Math.max(0, scrollOffset - 1);
-              } else if (matchesKey(data, "down") || data === "j") {
-                scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-              } else if (matchesKey(data, "pageUp") || data === "u") {
-                scrollOffset = Math.max(0, scrollOffset - lastViewportRows);
-              } else if (matchesKey(data, "pageDown") || data === "d") {
-                scrollOffset = Math.min(maxScroll, scrollOffset + lastViewportRows);
-              } else if (data === "g") {
-                scrollOffset = 0;
-              } else if (data === "G") {
-                scrollOffset = maxScroll;
-              }
-              tui.requestRender();
-            },
-
-            invalidate(): void {},
-
-            dispose(): void {
-              clearOverlay();
-            },
-          };
-          },
-          {
-            overlay: true,
-            overlayOptions: {
-              width: "95%",
-              maxHeight: "90%",
-              anchor: "center" as const,
-            },
+          if (matchesKey(data, "escape") || data === "q") {
+            done(undefined);
+            return;
           }
-        );
+          if (matchesKey(data, "up") || data === "k") {
+            scrollOffset = Math.max(0, scrollOffset - 1);
+          } else if (matchesKey(data, "down") || data === "j") {
+            scrollOffset = Math.min(maxScroll, scrollOffset + 1);
+          } else if (matchesKey(data, "pageUp") || data === "u") {
+            scrollOffset = Math.max(0, scrollOffset - lastViewportRows);
+          } else if (matchesKey(data, "pageDown") || data === "d") {
+            scrollOffset = Math.min(maxScroll, scrollOffset + lastViewportRows);
+          } else if (data === "g") {
+            scrollOffset = 0;
+          } else if (data === "G") {
+            scrollOffset = maxScroll;
+          }
+          tui.requestRender();
+        },
+
+        invalidate(): void {},
+
+        dispose(): void {
+          clearOverlay();
+        },
+      };
       },
-    });
+      {
+        overlay: true,
+        overlayOptions: {
+          width: "95%",
+          maxHeight: "90%",
+          anchor: "center" as const,
+        },
+      }
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Opt-in keyboard shortcuts (none bound by default; see shortcuts.ts)
+  // -----------------------------------------------------------------------
+
+  const shortcutActions: Record<
+    (typeof SHORTCUT_ACTIONS)[number],
+    { description: string; handler: (ctx: ExtensionContext) => Promise<void> | void }
+  > = {
+    fullscreenDashboard: {
+      description: "Fullscreen autoresearch dashboard",
+      handler: openFullscreenDashboard,
+    },
+    export: {
+      description: "Open the autoresearch browser dashboard",
+      handler: (ctx) => exportDashboard(ctx),
+    },
+    off: {
+      description: "Turn autoresearch mode off",
+      handler: (ctx) => turnAutoresearchOff(ctx),
+    },
+  };
+
+  for (const action of SHORTCUT_ACTIONS) {
+    const chord = shortcuts[action];
+    if (chord) pi.registerShortcut(chord, shortcutActions[action]);
   }
 
   // -----------------------------------------------------------------------
@@ -2654,17 +2823,20 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   const dashboardSseClients = new Set<ServerResponse>();
 
   function openInBrowser(url: string): void {
-    if (process.platform === "win32") {
-      spawn("cmd", ["/c", "start", "", url], {
-        detached: true,
-        shell: true,
-        stdio: "ignore",
-      }).unref();
-      return;
-    }
-
-    const openCmd = process.platform === "darwin" ? "open" : "xdg-open";
-    spawn(openCmd, [url], { detached: true, stdio: "ignore" }).unref();
+    const child = process.platform === "win32"
+      ? spawn("cmd", ["/c", "start", "", url], {
+          detached: true,
+          shell: true,
+          stdio: "ignore",
+        })
+      : spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], {
+          detached: true,
+          stdio: "ignore",
+        });
+    // Swallow launcher errors (e.g. xdg-open missing); caller prints the URL
+    // so the user can open it manually.
+    child.on("error", () => { /* ignore */ });
+    child.unref();
   }
 
   function stopDashboardServer(): void {
@@ -2821,8 +2993,30 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
   // /autoresearch command — enter autoresearch mode
   // -----------------------------------------------------------------------
 
+  function turnAutoresearchOff(ctx: ExtensionContext): void {
+    const runtime = getRuntime(ctx);
+    const wasRunning = !ctx.isIdle();
+    const workDir = resolveWorkDir(ctx.cwd);
+
+    recordAutoresearchActivation(workDir, false);
+    setAutoresearchMode(ctx, false);
+    runtime.autoResumeTurns = 0;
+    runtime.experimentsThisSession = 0;
+    runtime.lastRunChecks = null;
+    runtime.lastRunDuration = null;
+    runtime.runningExperiment = null;
+    cancelPendingResume(runtime);
+    stopDashboardServer();
+    clearSessionUi(ctx);
+    if (wasRunning) ctx.abort();
+    ctx.ui.notify(
+      wasRunning ? "Autoresearch mode OFF — aborting current run" : "Autoresearch mode OFF",
+      "info"
+    );
+  }
+
   pi.registerCommand("autoresearch", {
-    description: "Start, stop, clear, or resume autoresearch mode",
+    description: "Start, stop, clear, export, or open dashboards for autoresearch mode",
     handler: async (args, ctx) => {
       const runtime = getRuntime(ctx);
       const trimmedArgs = (args ?? "").trim();
@@ -2834,22 +3028,7 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
       }
 
       if (command === "off") {
-        const wasRunning = !ctx.isIdle();
-
-        setAutoresearchMode(ctx, false);
-        runtime.autoResumeTurns = 0;
-        runtime.experimentsThisSession = 0;
-        runtime.lastRunChecks = null;
-        runtime.lastRunDuration = null;
-        runtime.runningExperiment = null;
-        cancelPendingResume(runtime);
-        stopDashboardServer();
-        clearSessionUi(ctx);
-        if (wasRunning) ctx.abort();
-        ctx.ui.notify(
-          wasRunning ? "Autoresearch mode OFF — aborting current run" : "Autoresearch mode OFF",
-          "info"
-        );
+        turnAutoresearchOff(ctx);
         return;
       }
 
@@ -2858,9 +3037,15 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
         return;
       }
 
+      if (command === "dashboard") {
+        await openFullscreenDashboard(ctx);
+        return;
+      }
+
       if (command === "clear") {
         const workDir = resolveWorkDir(ctx.cwd);
         const jsonlPaths = sessionFileCandidates(workDir, "log");
+        recordAutoresearchActivation(workDir, false);
         setAutoresearchMode(ctx, false);
         runtime.autoResumeTurns = 0;
         runtime.experimentsThisSession = 0;
@@ -2900,14 +3085,14 @@ export default function autoresearchExtension(pi: ExtensionAPI) {
         return;
       }
 
+      const workDir = resolveWorkDir(ctx.cwd);
+      recordAutoresearchActivation(workDir, true);
       setAutoresearchMode(ctx, true);
       runtime.autoResumeTurns = 0;
-
-      const workDir = resolveWorkDir(ctx.cwd);
       const rulesLoaded = hasAutoresearchRules(ctx);
       // No .auto/prompt.md yet — load the create skill so the agent follows the
-      // setup guidelines. `/skill:<name>` is expanded to the full SKILL.md by
-      // pi's input pipeline (requires `enableSkillCommands`), and trailing args
+      // setup guidelines. `/skill:<name>` is expanded to the full SKILL.md when
+      // sent with `expandPromptTemplates` (see sendWhenReady), and trailing args
       // are appended as the session goal. Must be sent as its own message that
       // STARTS with `/skill:` so expansion triggers — don't prepend hook output.
       const kickoff = rulesLoaded

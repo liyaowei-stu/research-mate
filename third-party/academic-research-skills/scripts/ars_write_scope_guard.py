@@ -3,8 +3,16 @@
 
 Spec: docs/design/2026-06-01-ars-134-conductor-rescope-deterministic-write-guard-spec.md
 
-Blocks out-of-scope file writes by the 23 Bucket A single-phase subagents, backed by
+Blocks out-of-scope file writes by the 23 Bucket A single-phase agents, backed by
 the machine-readable scope manifest at scripts/ars_phase_scope_manifest.json.
+
+WHEN THE FENCE ENGAGES (#973): only when a Bucket A role runs as a separately dispatched
+subagent whose payload `agent_type` maps to a manifest key, in an install that wires this
+hook (the plugin install). Today that means the plugin-shipped `synthesis_agent` and
+`research_architect_agent`. Most roles run inline in the main session by default; a
+main-session payload carries no `agent_type`, so those writes are unconstrained here and
+the prompt-level Phase Boundary blocks are the only fence
+(scripts/fixtures/write_scope_guard/captured_payloads.json pins the real payload shapes).
 
 COVERAGE CLAIM — stated precisely, NOT over-promised (spec §3.3 / §7):
   * DETERMINISTIC for the structured editing tools (Write / Edit / MultiEdit): a write
@@ -29,9 +37,13 @@ function. `main()` only wires stdin -> evaluate_decision -> stdout JSON.
 
 PAYLOAD CONTRACT (first-party verified against official Claude Code hook docs 2026-06-01):
   Available: session_id, transcript_path, cwd, permission_mode, hook_event_name, effort,
-  tool_name, tool_input, plus subagent-conditional agent_id / agent_type. `agent_type`
-  equals the subagent's frontmatter `name` (e.g. "bibliography_agent"). `tool_use_id` is
-  NOT a payload field — do not rely on it.
+  tool_name, tool_input, plus subagent-conditional agent_id / agent_type. For an agent
+  defined in a project or user agents dir, `agent_type` equals its frontmatter `name`
+  (e.g. "bibliography_agent"); for an agent shipped by this plugin it is the plugin-scoped
+  identifier ("academic-research-skills:synthesis_agent", #971). The manifest keys the bare
+  name; `_manifest_key` maps the scoped form back to it. Captured payloads (Claude Code
+  2.1.296, #973) also carry `tool_use_id` and `prompt_id`; the guard does not read them, so
+  their presence or absence never changes a decision.
 
 TOOL_INPUT SHAPES: Write / Edit / MultiEdit each carry a SINGLE top-level `file_path`.
   Write: {file_path, content}; Edit: {file_path, old_string, new_string};
@@ -47,6 +59,7 @@ import fnmatch
 import json
 import os
 import sys
+from pathlib import Path
 
 MANIFEST_FILENAME = "ars_phase_scope_manifest.json"
 
@@ -58,6 +71,12 @@ STRUCTURED_WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}
 
 # Tools the guard inspects at all. Everything else -> allow (out of scope).
 INSPECTED_TOOLS = STRUCTURED_WRITE_TOOLS | {"Bash"}
+
+# Claude Code reports an agent shipped by a plugin as "<plugin name>:<agent name>" (#971).
+# Only THIS plugin's prefix is stripped: another plugin's agent that happens to share a
+# manifest name is not an ARS agent and stays out of the fence. Pinned to the `name` in
+# .claude-plugin/plugin.json by the guard tests.
+PLUGIN_AGENT_NAMESPACE = "academic-research-skills:"
 
 # Step 2 infrastructure self-protection — normalized workspace-relative path patterns
 # that NO agent (and not even the unconstrained main session) may write. These are the
@@ -80,14 +99,30 @@ INFRA_PROTECTED_GLOBS = [
     "**/check_v3_10_134_write_scope.py",  # the three-way name cross-check lint
     "check_v3_10_134_write_scope.py",
     # Agent definition files: the agent_type==name binding lives in their frontmatter;
-    # renaming an agent out of the manifest would fail the guard open.
+    # renaming an agent out of the manifest would fail the guard open. Covers the per-skill
+    # source dirs, the shared dir, AND the top-level plugin-shipped `agents/` dir (the
+    # #413-materialized byte-identical copies — these carry the same name binding and were
+    # previously unprotected; closed in #448 when the plugin-root anchoring re-established
+    # which files count as plugin infra).
     "deep-research/agents/*.md",
     "academic-paper/agents/*.md",
     "academic-paper-reviewer/agents/*.md",
     "academic-pipeline/agents/*.md",
     "shared/agents/*.md",
-    ".claude/CLAUDE.md",
-    "CLAUDE.md",
+    "agents/*.md",
+    # CLAUDE.md / .claude/CLAUDE.md are DELIBERATELY NOT protected (#459). They were
+    # added to guard ARS's own repo CLAUDE.md, but two generic doc filenames collide
+    # with the user's own project under the clone+symlink install layout: there
+    # CLAUDE_PLUGIN_ROOT is unset, the plugin_root fallback resolves to the cloned repo
+    # root, and a user working IN that repo has plugin_root == workspace_root — so their
+    # own CLAUDE.md sits at plugin_root and the infra glob re-denied it (the #448 bug
+    # resurfacing on a layout the #449 plugin-root anchoring can't distinguish, because
+    # home-turf and clone-as-user are the SAME runtime condition). Unlike every entry
+    # above, CLAUDE.md is NOT load-bearing: it documents the guard binding, it is not the
+    # binding — editing it cannot fail the guard open. So protecting it bought soft-policy
+    # comfort at the cost of a hard false-deny for real users. The right home for "don't let
+    # an agent rewrite ARS's own instruction doc" is review / CI, not the write-scope guard,
+    # which must protect ENFORCEMENT files only. See #459 (and #448/#449 for the history).
 ]
 
 
@@ -185,7 +220,16 @@ def _matches_any(rel_path, globs):
                     workspace root, the INFRA list carries both `**/name` and the bare
                     `name` (a deny-list, so widening is safe — see INFRA_PROTECTED_GLOBS).
     """
-    segs = [s for s in rel_path.split(os.sep) if s not in ("", ".")]
+    # Glob patterns are authored with `/`; segment-split the path on the same separator.
+    # On Windows, rel_path (from os.path.relpath) uses `\`, so normalize `\` -> `/` THERE.
+    # On POSIX this MUST stay a no-op: `\` is a LEGAL filename character, so an
+    # unconditional replace would rewrite a root-level file literally named
+    # `phase2_x\notes.md` (one segment) into `phase2_x/notes.md` (two segments) and let it
+    # masquerade as the `phase2_*` dir — a fence-escape false-allow (#330 PR #450 caught by
+    # cross-model review). Gate on os.sep so the rewrite only fires where `\` is a separator.
+    if os.sep == "\\":
+        rel_path = rel_path.replace("\\", "/")
+    segs = [s for s in rel_path.split("/") if s not in ("", ".")]
     for g in globs:
         pat = [s for s in g.split("/") if s != ""]
         if _match_segments(segs, pat):
@@ -193,9 +237,55 @@ def _matches_any(rel_path, globs):
     return False
 
 
-def _infra_protected(rel_path):
-    """Step 2 — is the normalized target part of the enforcement surface?"""
-    return _matches_any(rel_path, INFRA_PROTECTED_GLOBS)
+def _infra_protected_target(raw_path, cwd, plugin_root):
+    """Step 2 — is the write target one of the ARS plugin's OWN enforcement files?
+
+    #448 root-cause fix: infra self-protection must be anchored to the PLUGIN root, not
+    the user's PROJECT root. The two enforcement surfaces have different anchors:
+      * Bucket A phase-scope (Step 4) fences agents to their phaseN_ dir inside the USER'S
+        project — anchored on workspace_root (= CLAUDE_PROJECT_DIR).
+      * Infra self-protection (here) protects the ARS plugin's own files from tampering —
+        those live under the plugin install dir, so it MUST be anchored on plugin_root.
+    Conflating them was the bug: matching the plugin's infra filenames (`CLAUDE.md`,
+    `hooks/*.sh`, `shared/agents/*.md`, ...) against a user PROJECT path denied the user's
+    own same-named files — even from the trusted main session.
+
+    A target is an infra target IFF it resolves INSIDE plugin_root AND its plugin-root-
+    relative path matches INFRA_PROTECTED_GLOBS. A target outside plugin_root (the normal
+    case in a user project where plugin_root != workspace_root) is never an infra target.
+
+    A None plugin_root here returns False ("no infra root known -> not infra-protected").
+    evaluate_decision never calls in with None — it substitutes workspace_root first — so
+    this is a pure defensive guard, not a path any real caller exercises.
+    """
+    if not plugin_root:
+        return False
+    # Resolve the target the SAME way _normalize_target does (realpath, tolerant of a
+    # not-yet-created leaf), but anchored on plugin_root instead of workspace_root.
+    rp = raw_path
+    if not os.path.isabs(rp):
+        rp = os.path.join(cwd, rp)
+    normalized = os.path.realpath(rp)
+    real_plugin = os.path.realpath(plugin_root)
+    try:
+        common = os.path.commonpath([normalized, real_plugin])
+    except ValueError:
+        return False  # different drives -> cannot be inside plugin root
+    if common != real_plugin:
+        return False  # target resolves OUTSIDE the plugin root -> not an infra file
+    rel = os.path.relpath(normalized, real_plugin)
+    if rel == ".":
+        return False  # the plugin root dir itself is not an enumerated infra FILE
+    return _matches_any(rel, INFRA_PROTECTED_GLOBS)
+
+
+def _manifest_key(agent_type):
+    """The manifest key for a payload agent_type: this plugin's scoped identifier
+    ("academic-research-skills:synthesis_agent") maps to the bare name the manifest keys
+    ("synthesis_agent"); anything else is returned unchanged (#971)."""
+    if isinstance(agent_type, str) and agent_type.startswith(PLUGIN_AGENT_NAMESPACE):
+        return agent_type[len(PLUGIN_AGENT_NAMESPACE):]
+    return agent_type
 
 
 def _allow_unconstrained(agent_type):
@@ -222,20 +312,35 @@ def _extract_structured_target(tool_input):
     return fp if isinstance(fp, str) and fp else None
 
 
-def evaluate_decision(payload, manifest, workspace_root):
+def evaluate_decision(payload, manifest, workspace_root, plugin_root=None):
     """Pure decision function implementing the spec §3.2 logic (Bash policy per §7, shipped).
 
     Returns a dict: {"decision": "allow"|"deny", "reason": str, ...advisory flags}.
 
     Two enforcement paths:
-      * Structured tools (Write/Edit/MultiEdit) — deterministic write-scope: normalize the
-        single top-level file_path FIRST, then infra self-protection, then Bucket A glob.
+      * Structured tools (Write/Edit/MultiEdit) — deterministic write-scope: extract the
+        single top-level file_path, run infra self-protection FIRST (anchored on plugin_root,
+        #448), then normalize against workspace_root for the escape check, then Bucket A glob.
       * Bash — DENY ALL for a Bucket A agent (spec §3.2 Step-4 hardening: neither a denylist
         of "mutation-capable" Bash nor an allowlist of "read-only" Bash is sound, because
         neither property is stable across commands/flags/env/versions; only all-deny reaches
         zero fail-open by construction). The agent uses the Grep/Glob tools for search and the
         structured tools for writes. Non-Bucket-A Bash passes through.
+
+    plugin_root (#448): the ARS plugin install dir, used to anchor infra self-protection
+    (Step 2). main() ALWAYS supplies a concrete root (CLAUDE_PLUGIN_ROOT or the resolved
+    repo root), so the None default exists only for the ARS-on-ARS unit tests and for any
+    caller that genuinely cannot determine a plugin root.
+
+    When None, infra protection falls back to workspace_root. This is correct ONLY when the
+    plugin and the workspace are the same tree (ARS developing ARS): it then reproduces the
+    pre-#448 behavior byte-for-byte. It is NOT a safe default under a real plugin install
+    (plugin_root != workspace_root) — there it would both re-deny the user's own CLAUDE.md
+    and FAIL to protect plugin infra (those files are mere workspace escapes). So a real
+    runtime caller MUST pass plugin_root; do not rely on this fallback off the home turf.
     """
+    if not plugin_root:
+        plugin_root = workspace_root
     # The pure core defends itself too — not only main() — so a non-dict payload (`[]`,
     # null, a string) passed straight to evaluate_decision can't crash on `.get` (review).
     if not isinstance(payload, dict):
@@ -246,8 +351,9 @@ def evaluate_decision(payload, manifest, workspace_root):
         tool_input = {}
     cwd = payload.get("cwd") or workspace_root
     agent_type = payload.get("agent_type")
+    agent_key = _manifest_key(agent_type)
     agents = (manifest or {}).get("agents", {})
-    is_bucket_a = bool(agent_type) and agent_type in agents
+    is_bucket_a = bool(agent_key) and agent_key in agents
 
     # Tools we don't inspect (Read, Grep, WebFetch, ...) -> allow.
     if tool_name not in INSPECTED_TOOLS:
@@ -282,6 +388,27 @@ def evaluate_decision(payload, manifest, workspace_root):
                        "fail-open. Re-verify the tool_input shape."),
             "schema_drift_advisory": True,
         }
+    # --- Step 2: infrastructure self-protection (anchored on plugin_root). RUNS FIRST,
+    #     BEFORE the user-workspace escape check. ---
+    # #448: anchored on the PLUGIN root, not the user's PROJECT root. Two reasons it must
+    # precede the escape check:
+    #   (a) Under a plugin install, the plugin's own files live OUTSIDE the user workspace,
+    #       so they are "escaped" relative to workspace_root — the escape branch would let a
+    #       main-session write to them through. Checking infra first keeps them protected
+    #       wherever they physically sit.
+    #   (b) A target inside the USER's project that merely shares a filename with an ARS infra
+    #       file (the user's own CLAUDE.md / hooks/*.sh / shared/agents/*.md) resolves OUTSIDE
+    #       plugin_root, so _infra_protected_target returns False and it is left to Step 3/4 —
+    #       which is exactly the #448 fix.
+    # _infra_protected_target resolves the target on its own (realpath, anchored on
+    # plugin_root) so it is correct regardless of the workspace-relative `escaped` flag.
+    if _infra_protected_target(raw, cwd, plugin_root):
+        return {
+            "decision": "deny",
+            "reason": (f"ARS scope guard: {raw} is part of the ARS plugin's enforcement "
+                       "infrastructure and may not be written by any agent."),
+        }
+
     rel, escaped = _normalize_target(raw, cwd, workspace_root)
     if escaped:
         # The escape / path-traversal deny is a BUCKET A FENCE, not a global one (#302).
@@ -291,11 +418,9 @@ def evaluate_decision(payload, manifest, workspace_root):
         # the workspace root and MUST be allowed — fencing it here contradicted the Step-3
         # "unconstrained by Slice 1" gate below. So: only a Bucket A agent is denied for an
         # escape; a non-Bucket-A actor falls through to the Step-3 allow.
-        #   Infra self-protection is intentionally NOT consulted on an escaped path: an escape
-        # means the resolved real path is OUTSIDE the workspace, and every INFRA_PROTECTED_GLOB
-        # is workspace-relative, so an escaped target can never be an infra target. (A symlink
-        # that resolves back INTO the workspace yields escaped=False — see _normalize_target —
-        # so infra protection still runs for it below.)
+        #   Infra self-protection already ran above (anchored on plugin_root), so an escaped
+        # target that is an ARS plugin file was already denied; what remains here is a genuine
+        # non-infra escape (e.g. a sibling worktree), correctly allowed for non-Bucket-A.
         if is_bucket_a:
             return {
                 "decision": "deny",
@@ -304,21 +429,13 @@ def evaluate_decision(payload, manifest, workspace_root):
             }
         return _allow_unconstrained(agent_type)
 
-    # --- Step 2: infrastructure self-protection (unconditional, on the normalized path). ---
-    if _infra_protected(rel):
-        return {
-            "decision": "deny",
-            "reason": (f"ARS scope guard: {rel} is part of the enforcement "
-                       "infrastructure and may not be written by any agent."),
-        }
-
     # --- Step 3: agent gating. ---
     if not is_bucket_a:
         # Main session or a Bucket B/C/D agent: unconstrained by Slice 1.
         return _allow_unconstrained(agent_type)
 
     # --- Step 4: Bucket A glob check (path already normalized in Step 1). ---
-    allowed = agents[agent_type].get("allowed_write_globs", [])
+    allowed = agents[agent_key].get("allowed_write_globs", [])
     if not _matches_any(rel, allowed):
         return {
             "decision": "deny",
@@ -377,8 +494,19 @@ def main():
         print(render_hook_output({"decision": "allow", "reason": ""}))
         return 0
 
-    # Workspace root: prefer CLAUDE_PROJECT_DIR, else the payload cwd.
+    # Workspace root: prefer CLAUDE_PROJECT_DIR, else the payload cwd. This anchors the
+    # Bucket A phase-scope check (Step 4) to the USER'S project.
     workspace_root = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or os.getcwd()
+
+    # Plugin root (#448): anchors infra self-protection (Step 2) to the ARS plugin's OWN
+    # files, NOT the user's project. CLAUDE_PLUGIN_ROOT is set on a plugin install; the
+    # git-clone+symlink track has no such env var, so fall back to this script's repo root
+    # (scripts/ -> repo root, where .claude-plugin/plugin.json lives). Use resolve() (NOT
+    # abspath) so a symlinked script / scripts dir — the norm for the ~/.claude/skills
+    # symlink install track — resolves to the REAL plugin tree, not the symlink's location
+    # (abspath would not follow the symlink and compute the wrong root).
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT") or str(
+        Path(__file__).resolve().parents[1])
 
     try:
         manifest = _load_manifest()
@@ -388,7 +516,7 @@ def main():
         print(render_hook_output({"decision": "allow", "reason": ""}))
         return 0
 
-    decision = evaluate_decision(payload, manifest, workspace_root)
+    decision = evaluate_decision(payload, manifest, workspace_root, plugin_root)
 
     # Surface fail-loud advisories to stderr (visible to the user/transcript), never silent.
     if decision.get("absent_agent_type_advisory"):

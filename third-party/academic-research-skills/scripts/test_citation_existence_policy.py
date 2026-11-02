@@ -76,15 +76,24 @@ def _ro(**overrides):
 _ADVISORY = "advisory"
 
 
+_CITATION_TIME_KEYS = frozenset({
+    "contamination_triangulation", "citation_existence", "temporal_integrity",
+})
+
+
 def policy_hash_slug(terminal_policies: dict | None) -> str | None:
-    """C-V6 / v3.10 slug rule: join each NON-advisory key as `key.value`, sorted by
-    key name, separated by `+`. Returns None when all-advisory (absent block, or every
-    key advisory) — the absence of a stamp IS the advisory signal (no `.advisory`
-    sentinel). This mirrors the rule in pipeline_orchestrator_agent.md and is the
-    oracle the prompt's policy_hash stamp must match."""
+    """C-V6 / v3.10 slug rule: join each NON-advisory CITATION-TIME key as
+    `key.value`, sorted by key name, separated by `+`. Returns None when
+    citation-time-advisory (absent block, or every citation-time key advisory)
+    — the absence of a stamp IS the advisory signal (no `.advisory` sentinel).
+    The package-level `submission_package` key (#394 slice 4) NEVER enters the
+    slug — its carrier is the verifier report's policy_slug + fingerprint, not
+    ref markers. This mirrors the rule in pipeline_orchestrator_agent.md and
+    is the oracle the prompt's policy_hash stamp must match."""
     tp = terminal_policies or {}
     non_advisory = sorted(
-        f"{k}.{v}" for k, v in tp.items() if v != _ADVISORY
+        f"{k}.{v}" for k, v in tp.items()
+        if v != _ADVISORY and k in _CITATION_TIME_KEYS
     )
     if not non_advisory:
         return None
@@ -235,8 +244,9 @@ def test_reducer_case_a_id_keyed_unmatched_is_false():
 
 def test_reducer_case_a_title_only_unmatched_is_unresolvable_not_false():
     """C-V6(a): a title-only unmatched (no resolvable identifier to key on) ⟹
-    unresolvable, NEVER false (real-but-unindexed coverage gap). This is the case the
-    narrowing was designed to protect — it must not block under strict."""
+    unresolvable, NEVER false (the coverage-safe shape for a potentially
+    real-but-unindexed work). This is a policy regression pin, not the genuine
+    all-resolver-unmatched corpus canary absent under accepted limitation #250."""
     assert reduce_lookup_verified(_ro(crossref=("unmatched", "title"))) == "unresolvable"
 
 
@@ -302,6 +312,20 @@ def test_oracle_slug_all_advisory_is_none():
     assert policy_hash_slug({"citation_existence": "advisory"}) is None
     assert policy_hash_slug({}) is None
     assert policy_hash_slug(None) is None
+
+
+def test_oracle_slug_submission_package_never_enters():
+    """#394 slice 4: submission_package is a PACKAGE-level policy — its
+    carrier is the verifier report (policy_slug + package_fingerprint), not
+    ref markers. A submission_package-only strict passport stamps nothing,
+    and a mixed passport's slug omits it (codex slice-4 review P2: without
+    this scope, package-only strict mode would force unrelated ref-marker
+    stamping and stale-refuse legacy markers)."""
+    assert policy_hash_slug({"submission_package": "strict"}) is None
+    assert policy_hash_slug({
+        "submission_package": "strict",
+        "citation_existence": "strict",
+    }) == "citation_existence.strict"
 
 
 def test_oracle_h_recompute_is_pure_no_cache():
@@ -384,9 +408,10 @@ def test_formatter_has_no_per_policy_citation_existence_refusal(formatter_text):
 
 def test_mutation_M1_title_only_as_false_must_fail_case_a():
     """M1 (spec line 158): a trivial reducer that treats a title-only unmatched as
-    `false` MUST break case (a) — the unindexed-real-paper protection. We assert the
-    trivial verdict FAILS the case-(a) assertion, proving the real reducer's narrowing
-    is load-bearing (not incidentally satisfied)."""
+    `false` MUST break case (a) — the potentially-unindexed-work protection. We
+    assert the trivial verdict FAILS the case-(a) assertion, proving the real
+    reducer's narrowing is load-bearing (not incidentally satisfied). This does
+    not claim the fixture is #250's unavailable genuine-unindexed canary."""
     def trivial_reduce_unmatched_is_false(ro):
         outcomes = [v or {} for v in ro.values()]
         applicable = [o for o in outcomes if o.get("status") != "skipped"]

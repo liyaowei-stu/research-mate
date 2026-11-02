@@ -1,7 +1,7 @@
 ---
 name: openalex
 description: Search academic papers via OpenAlex API for open citation data, institutional affiliations, and funding information. Use when user says "openalex search", "search openalex", "open citation graph", or wants comprehensive academic metadata beyond arXiv/Semantic Scholar.
-argument-hint: [search-query]
+argument-hint: "[search-query]"
 allowed-tools: Bash(*), Read, Write
 ---
 
@@ -58,11 +58,14 @@ Use OpenAlex when you want:
    pip install requests
    ```
 
-2. **Optional: API keys** — Export them in your shell or project environment:
+2. **Optional: API key and email** — Set the variables you use in the same shell **before starting Codex** so helper commands inherit them:
    ```bash
-   export OPENALEX_API_KEY=your-key-here
-   export OPENALEX_EMAIL=your-email@example.com
+   export OPENALEX_API_KEY='your-key-here'
+   export OPENALEX_EMAIL='your-email@example.com'
+   codex
    ```
+
+   The helper reads `OPENALEX_API_KEY` and `OPENALEX_EMAIL` from its process environment. A separate tool-shell `export` does not update an already running host. If you keep credentials in an environment file, load it explicitly before starting the host rather than relying on automatic `.env` loading.
 
 3. **Get API keys** (optional but recommended):
    - **OpenAlex API key**: Free tier $1/day (10,000 list calls, 1,000 search calls) from [openalex.org](https://openalex.org/)

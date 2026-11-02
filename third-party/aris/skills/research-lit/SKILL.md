@@ -1,8 +1,8 @@
 ---
 name: research-lit
 description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
-argument-hint: [paper-topic-or-url]
-allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
+argument-hint: "[paper-topic-or-url]"
+allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent(aris-fanout-leaf), mcp__zotero__*, mcp__obsidian-vault__*
 ---
 
 # Research Literature Review
@@ -135,7 +135,13 @@ Before searching online, check if the user already has relevant papers locally:
 
 5. **Build local knowledge base**: Compile summaries into a "papers you already have" section. This becomes the starting point — external search fills the gaps.
 
-> 📚 If no local papers are found, skip to Step 1. If the user has a comprehensive local collection, the external search can be more targeted (focus on what's missing).
+> 📚 If the user has a comprehensive local collection, the external search can be more targeted (focus on what's missing).
+>
+> ⚠️ **If all three PAPER_LIBRARY paths miss, say so before moving on** — do not skip silently. A user whose PDFs live in a reference manager (Zotero, Mendeley, ...) otherwise assumes `— sources: all` covered them. Emit:
+>
+> `WARN: local contributed nothing — no PDFs found in papers/, literature/, or a configured paper library. To include yours, add a "## Paper Library" heading to CLAUDE.md followed by the directory path.`
+>
+> Then continue to Step 1.
 
 ### Step 1: Search (external)
 - Use WebSearch to find recent papers on the topic
@@ -172,6 +178,9 @@ on failure, never abort the whole aggregate):
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 ARXIV_FETCHER=".aris/tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || ARXIV_FETCHER="tools/arxiv_fetch.py"
@@ -214,6 +223,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 # Resolve $S2_FETCHER (Policy D2 — warn-and-skip on missing).
 S2_FETCHER=".aris/tools/semantic_scholar_fetch.py"
 [ -f "$S2_FETCHER" ] || S2_FETCHER="tools/semantic_scholar_fetch.py"
@@ -251,6 +263,9 @@ When the user explicitly requests `— sources: deepxiv` (or includes `deepxiv` 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 # Resolve $DEEPXIV_FETCHER (Policy D2 — warn-and-skip on missing).
 DEEPXIV_FETCHER=".aris/tools/deepxiv_fetch.py"
@@ -294,6 +309,9 @@ When the user explicitly requests `— sources: exa` (or includes `exa` in a com
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 # Resolve $EXA_FETCHER (Policy D2 — warn-and-skip on missing).
 EXA_FETCHER=".aris/tools/exa_search.py"
@@ -383,6 +401,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 # Resolve $OPENALEX_FETCHER (Policy D2 — warn-and-skip on missing).
 OPENALEX_FETCHER=".aris/tools/openalex_fetch.py"
 [ -f "$OPENALEX_FETCHER" ] || OPENALEX_FETCHER="tools/openalex_fetch.py"
@@ -464,6 +485,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 ARXIV_FETCHER=".aris/tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"; }
@@ -494,6 +518,9 @@ rather than silently dropping candidates.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 VERIFY_PAPERS=".aris/tools/verify_papers.py"
 [ -f "$VERIFY_PAPERS" ] || VERIFY_PAPERS="tools/verify_papers.py"
@@ -527,8 +554,8 @@ if [ -n "$VERIFY_PAPERS" ]; then
     echo "WARN: verify_papers.py invocation failed (resolved at $VERIFY_PAPERS); falling back to [UNVERIFIED] tagging." >&2
   fi
 else
-  echo "WARN: verify_papers.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
-  echo "      Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  echo "WARN: verify_papers.py not resolved at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
+  echo "      Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or copy the helper to tools/." >&2
 fi
 if [ "$verify_ok" = "false" ]; then
   if ! command -v python3 >/dev/null 2>&1; then
@@ -574,35 +601,63 @@ fi
 Optional: set `ARIS_VERIFY_EMAIL=you@institution.edu` in your shell to lift
 CrossRef rate limits to the polite pool.
 
+### Step 1.6: Freeze Leaf-Readable Evidence (mandatory before dispatch)
+
+The parent still owns the retrieval context and all writes. Before Step 2, it
+must create one read-only file per shard under
+`.aris/verify-papers/research-lit-evidence/`. Each file contains only that
+shard's assigned papers and records `paper_id`, `title`,
+`verification_status`, `abstract`, `source_excerpt`, `local_pdf_path`,
+`local_note_paths`, and `evidence_status`.
+
+Populate these fields from already retrieved API abstracts/excerpts, Zotero or
+Obsidian text, or readable local PDF/note paths. Identity fields or remote URLs
+alone are not sufficient for a `Read`/`Grep`/`Glob`-only leaf. Pass the shard's
+absolute evidence-file path and assigned IDs in the leaf prompt; the leaf may
+extract only claims supported by that file.
+
+If a paper has no abstract, source excerpt, readable local PDF, or readable
+local note, record `evidence_status: UNPROCESSABLE_NO_LOCAL_EVIDENCE`. Do not
+dispatch it as completed work and do not infer method or results from its title.
+The parent may use the one allowed sequential fallback to gather/process local
+evidence; otherwise keep the paper explicitly uncovered and `UNPROCESSED` in
+the coverage receipt.
+
 ### Step 2: Analyze Each Paper
 
-> **Fan-out (Tier-aware).** Per-paper extraction is pure breadth — each paper
-> is independent — so it parallelizes cleanly. **Tier 1** (Workflow): spawn
-> one Claude subagent per paper (or per small batch) to extract the fields
-> below. **Tier 2** (Agent tool, no Workflow): the same per-paper subagents
-> via the Agent tool. **Tier 3**: iterate sequentially. This follows the
-> *extraction* shard schema from
-> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
-> — `{shard_id: "<paper-or-batch id>", entries: [{dedup_key: "<canonical
-> arXiv-id / DOI / title-hash, already assigned upstream in Step 1.5>",
-> problem, method, results, relevance, source, verification_status}]}`.
+> **Bounded fan-out (Tier-aware).** Per-paper extraction is breadth-bound, but
+> never create one worker per paper. Freeze every canonical paper ID from Step
+> 1.5, sort the IDs, and partition them deterministically into no more than
+> `max_shards: 8` non-overlapping batches. Run waves of at most
+> `max_concurrency: 4`, with `max_turns: 8` per leaf.
 >
-> The "jury" here is **not a model** — it is the **deterministic**
-> `verify_papers.py` gate already run in Step 1.5 (3-layer arXiv / CrossRef /
-> Semantic Scholar cross-check). Because the acceptance gate is a deterministic
-> verifier, not a model verdict, the cross-model-family rule is automatically
-> satisfied (a process is not a model family — see
-> [`acceptance-gate.md`](../shared-references/acceptance-gate.md)), so this is
-> the **near-zero-risk** corner of the fan-out design space. The per-paper work
-> is **extraction, not adjudication**: shards report what each paper says and
-> its verification status verbatim; they do **not** decide which papers
-> "count" (Step 1.5 already did, mechanically) and they do **not** drop a paper
-> for any status other than `verified`. Synthesis (Step 3) is *interpretive*
-> aggregation — grouping by theme, spotting gaps our work could fill — over an
-> already-admitted set; it is the executor's normal job, NOT an accept/reject
-> verdict on whether a paper *counts*. The cross-model-family rule governs
-> admission verdicts, and here admission is the deterministic Step-1.5 gate, so
-> the invariant is satisfied without a model jury.
+> - **Tier 1** (Workflow): explicitly select `aris-fanout-leaf` for each batch.
+> - **Tier 2** (Agent): call only `Agent(aris-fanout-leaf)`; never substitute an
+>   unrestricted worker.
+> - **Tier 3**: process the same frozen batches sequentially. If a leaf fails,
+>   returns malformed output, or times out, give that batch at most one
+>   executor-side **sequential fallback** and never launch a replacement Agent.
+>
+> Each leaf returns the extraction envelope from
+> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md):
+> `{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
+> Every entry keeps the canonical arXiv ID / DOI / title hash as `dedup_key` and
+> reports `problem`, `method`, `results`, `relevance`, `source`, and
+> `verification_status` verbatim. The leaf prompt repeats the no-delegation,
+> read-only, no-verdict, and assigned-ID boundaries because workers do not
+> inherit this skill body.
+>
+> **Coverage receipt:** after the one allowed sequential fallback, reconcile
+> `covered_unit_ids` against the frozen paper-ID set and record planned,
+> completed, failed, and uncovered IDs plus `coverage_complete`. Any unresolved
+> paper remains explicitly `UNPROCESSED`; absence must never be interpreted as
+> irrelevance or silently removed from the analyzed set.
+>
+> The "jury" here is **not a model** — it is the deterministic
+> `verify_papers.py` admission gate from Step 1.5. That gate verifies identity;
+> the coverage receipt separately verifies extraction completeness. Neither
+> leaf workers nor synthesis may reinterpret a missing extraction as an
+> admission decision.
 
 For **every** paper in `.aris/verify-papers/verified_papers.json`
 (verified, unverified, `verify_pending`, and `error` alike — see
@@ -672,11 +727,14 @@ chain documented in
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+  ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
 [ -f "$WIKI_SCRIPT" ] || {
-  echo "WARN: research_wiki.py not found; literature synthesis will be reported but wiki ingest will be skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+  echo "WARN: research_wiki.py not found; literature synthesis will be reported but wiki ingest will be skipped. Fix: bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
   WIKI_SCRIPT=""
 }
 ```

@@ -1,21 +1,38 @@
 ---
 name: proof-checker
-description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (Codex GPT-5.5 xhigh), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
-argument-hint: [path-to-tex-file or proof-description]
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
+description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via fresh-agent Codex GPT-6-Astra ultra review, fixes each gap with full derivations, re-reviews, and generates an audit report. Base review is same-family provisional. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
+argument-hint: "[path-to-tex-file or proof-description]"
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
-Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
+> **Before each reviewer slot**, follow [Selectable Reviewers](../shared-references/reviewer-backends.md):
+> resolve invocation → `.aris/reviewer.json` → Codex default (fresh native reviewer)
+> with `reviewer_route.py` through the canonical helper resolver, preserving this
+> slot's tier, fresh contexts, source/image inputs and deterministic gates.
+> Codex examples/pins below apply only to `backend=codex`; other routes use their
+> own first-call/reply contract. Save the route and actual returned identity;
+> unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
+> families/completion/scope. Forward invocation reviewer/model/effort overrides
+> to reviewer-bearing children. Generation workers are unchanged.
+
+
+> **Codex assurance:** base Codex proof judgments are
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Deterministic compilation/algebra checks may be accepted; a semantic proof
+> acceptance requires a completed positive review with known different model families. Reviewer failure emits BLOCKED.
+
+Systematically verify a mathematical proof via fresh-agent adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
 ## Context: $ARGUMENTS
 
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.5` via Codex reviewer agent, reasoning effort always `xhigh`
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, xhigh). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL = `gpt-6-astra` via Codex reviewer agent, reasoning effort
+  `ultra` for this deep-audit skill (capability fallback never below `xhigh`)
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, ultra — deep-audit tier). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 - AUDIT_DOC: `PROOF_AUDIT.md` at the paper directory root, alongside `main.tex` (cumulative log; when invoked via `/paper-writing`, this is `paper/PROOF_AUDIT.md`)
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
@@ -122,6 +139,41 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ## Workflow
 
+### Proof-obligation fan-out
+
+Freeze mechanically enumerable **source-unit IDs** before extraction: stable
+file spans, sections, theorem/lemma/proposition blocks, or proof environments.
+Partition the source-ordered units into `max_shards: 8` or fewer groups. The
+executor may use at most `max_concurrency: 4` active shards and requests
+`max_turns: 8`, read-only behavior, and `recursion: false` in every
+leaf-equivalent prompt.
+
+**Stock Codex enforcement: prompt-only.** Standard Codex `spawn_agent` exposes
+no per-child tool allowlist, recursion flag, or child turn-cap parameter. These
+worker restrictions are prompt conventions unless the active host supplies
+structural enforcement, so stock Codex does not provide the same hard tool,
+non-recursion, and turn boundary as the Claude leaf. The executor still enforces
+fixed shard and concurrency limits, no replacement workers, and the coverage
+receipt. A failed, malformed, or timed-out shard gets at most one executor-side
+sequential fallback and no replacement agent.
+
+Each shard returns
+`{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
+Assigned and covered IDs are source-unit IDs. Obligations are discovered from
+those units and receive deterministic IDs only **after extraction**, derived
+from the source-unit ID plus a stable ordinal or anchor.
+
+Before building the global dependency DAG, emit a **coverage receipt** and
+require 100% declared source-unit coverage. The receipt proves **source-unit
+execution coverage only**; it does not prove that every relevant obligation was
+discovered or that the extracted ledger is mathematically complete. Any
+uncovered source unit makes the proof check `INCOMPLETE`/`BLOCKED`; no complete
+validity verdict may be emitted. Only after complete source-unit coverage does
+the parent mechanically merge the extracted ledger. The fresh Codex review
+that evaluates it records `review_independence: same-family` and
+`acceptance_status: provisional`. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
+
 ### Phase 0: Preparation
 
 1. **Locate the proof**: Find the main `.tex` file(s).
@@ -176,14 +228,28 @@ h_act = Θ(κ^α)  [as κ→0, uniform in π on compact subsets of Π_K, for fix
 ```
 Flag any statement where limit order is ambiguous or uniformity is unclear.
 
-### Phase 1: First Review (Codex GPT-5.5 xhigh)
+### Optional Lean verification
+
+When the user requests Lean or a specific obligation warrants formal checking,
+delegate that obligation and its original hypotheses to
+[`/lean-formalize`](../lean-formalize/SKILL.md). Record the checked scope, exported
+declaration, statement-alignment evidence, build output and transitive-axiom
+audit, then resume this audit. A proved sublemma closes only the corresponding
+obligation. Keep the complete proof audit, acceptance decision and canonical wiki
+artifacts here; the nested Lean task returns evidence without starting another
+`proof-checker` run. Routine proof checks do not require Lean. Reviewer agreement
+and unsuccessful counterexample searches do not discharge a proof obligation.
+
+### Phase 1: First Review (Codex GPT-6-Astra ultra)
 
 Submit the **complete proof content** with the following **mandatory reviewer checklist** in the prompt:
 
+> Resolve this reviewer slot first; the following is the `backend=codex` example.
+
 ```text
 spawn_agent:
-  model: gpt-5.5
-  reasoning_effort: xhigh
+  model: gpt-6-astra
+  reasoning_effort: ultra
   message: |
     You are performing a rigorous mathematical proof review. For EVERY theorem,
     lemma, and proposition, check ALL of the following:
@@ -292,7 +358,7 @@ Log this choice — it is a scope-changing decision when it alters theorem state
 pdflatex -interaction=nonstopmode <file>.tex 2>&1 | grep -E "Error|Warning|undefined"
 ```
 
-### Phase 3: Re-Review (Codex GPT-5.5 xhigh)
+### Phase 3: Re-Review (Codex GPT-6-Astra ultra)
 
 Launch a fresh reviewer agent for the next review round. Do not use `send_input` here; proof-checker keeps each round independent. Request the same mandatory checklist.
 
@@ -312,10 +378,12 @@ After all fixes, verify the proof as a whole:
 #### Independent second review for FATAL/CRITICAL fixes
 For any fix that resolved a FATAL or CRITICAL issue, submit the **fixed section alone** (without showing the previous critique) to a **fresh Codex thread**:
 
+> Resolve this reviewer slot first; the following is the `backend=codex` example.
+
 ```text
 spawn_agent:
-  model: gpt-5.5
-  reasoning_effort: xhigh
+  model: gpt-6-astra
+  reasoning_effort: ultra
   message: |
     Blind review of the following proof section. You have NOT seen any prior
     review or discussion. Check every step for correctness, hidden assumptions,
@@ -373,6 +441,39 @@ Write `PROOF_CHECK_STATE.json`:
 }
 ```
 
+### Phase 5.5: Research Wiki Claim Ledger (additive; only if a wiki is active)
+
+If — and only if — a `research-wiki/` exists, persist each top-level theorem/headline
+as a **claim node** (the wiki's PROVE/JUDGE ledger). This is the **birth point** for wiki
+claim nodes. It is a **detect-only record, never a verdict**: it never changes the audit's
+`verdict`/`reason_code`, never blocks, and is skipped when `verdict == NOT_APPLICABLE` or no
+wiki is found. The claim's `status` is the **PROOF axis only** ({drafted, unproven,
+sound-modulo-imports, verified, refuted, retracted}); empirical experiment support is a
+separate axis carried by edges (`/result-to-claim`), never written into `status`.
+
+Resolve the helper via the Codex-side chain (skip cleanly if unavailable; the audit is
+already complete):
+```
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+WIKI_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+```
+
+If `research-wiki/` exists and `WIKI_SCRIPT` is available and `verdict != NOT_APPLICABLE`,
+for each top-level theorem map the audit outcome to an honest status — `PASS`/all proofs
+complete → `verified`; closes modulo flagged imports → `sound-modulo-imports`; counterexample
+found or statement judged false → `refuted`; open gap (UNJUSTIFIED, no counterexample) →
+`unproven` (never fake a gap as `refuted`/`verified`) — then record it (idempotent):
+```
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
+     --name "<theorem headline>" --status "<mapped status>" \
+     --provenance "<trace_path from PROOF_AUDIT.json>" --statement "<canonical statement>" \
+     --scope "<what it does NOT say; flagged imports>" --update-on-exist
+```
+`add_claim` failure is non-fatal (warn and continue; the audit is unaffected).
+
 ## Key Rules
 
 ### Mathematical rigor
@@ -385,9 +486,9 @@ Write `PROOF_CHECK_STATE.json`:
 - **WLOG prohibition**: Every "without loss of generality" must have an explicit micro-claim proving the reduction. No free WLOGs.
 - **No silent assumption strengthening**: Any fix that adds conditions must propagate to the theorem statement.
 
-### Cross-model protocol
-- **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
-- **Codex reasoning always xhigh**: Never downgrade.
+### Review-independence protocol
+- **Codex executor analyzes and implements; a fresh Codex reviewer provides adversarial review.** Base review remains same-family/provisional.
+- **Codex reasoning always ultra** (deep-audit tier): never below `xhigh` — only the capability fallback in `reviewer-routing.md` may step down, and only on explicit capability errors.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
 - **Fresh reviewer agents**: Save each returned `agent_id` for traceability, but launch a new `spawn_agent` for each review round. Do not use `send_input` across proof-checker rounds.
 
@@ -438,8 +539,13 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.5",
-  "reviewer_reasoning": "xhigh",
+  "executor_model":   "codex-gpt-6-astra",
+  "executor_family":  "openai",
+  "reviewer_model":   "gpt-6-astra",
+  "reviewer_family":  "openai",
+  "review_independence": "<actual family comparison>",
+  "acceptance_status": "<actual acceptance status>",
+  "reviewer_reasoning": "ultra",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "theorems_audited": <int>,

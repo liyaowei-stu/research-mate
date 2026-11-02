@@ -13,6 +13,52 @@ must not, change *who renders the verdict*. The verdict stays a single,
 heterogeneous, cross-model step — identical whether you fanned out across
 8 parallel workers or ran one shard at a time on a slow night.
 
+## Bounded execution contract
+
+Candidate-generation and source-extraction stages in `idea-creator`,
+`research-lit`, and `proof-checker` use the same machine-readable limits:
+
+```yaml
+ARIS_FANOUT_AGENT_TYPE: aris-fanout-leaf
+ARIS_FANOUT_MAX_SHARDS: 8
+ARIS_FANOUT_MAX_CONCURRENCY: 4
+ARIS_FANOUT_SHARD_MAX_TURNS: 8
+ARIS_FANOUT_ALLOW_RECURSION: false
+ARIS_FANOUT_REQUIRE_COVERAGE_RECEIPT: true
+```
+
+On Claude Code, every Tier-1/2 shard MUST select the installed
+`aris-fanout-leaf` custom agent. The leaf's tool allowlist excludes delegation,
+shell, and mutation tools, making it a real leaf rather than a prompt-only
+request. If the leaf is unavailable, use the Tier-3 sequential fallback; never
+substitute `general-purpose`, `Explore`, `Plan`, or another recursively capable
+worker.
+
+Before dispatch, freeze the complete unit list and partition it into at most
+`max_shards: 8`. Launch waves of at most `max_concurrency: 4`; each leaf is
+bounded by `max_turns: 8`. A failed, malformed, or timed-out shard gets at most
+one executor-side **sequential fallback**. That fallback must not launch a
+replacement Agent.
+
+After collection and fallback, the executor emits a **coverage receipt** with
+planned/completed/failed shard IDs, planned/covered/uncovered unit IDs, and a
+mechanically computed `coverage_complete` boolean. This receipt proves execution
+coverage only; it never judges candidate quality, paper relevance, or proof
+validity.
+
+`max_turns` is a portable hard limit. Wall-clock cancellation is host-dependent:
+use it when the runtime exposes task cancellation, but do not claim that an
+elapsed-time deadline is universally enforced at Tier 2.
+
+### Implementation delegation
+
+`lean-formalize` also delegates proof implementation in owned modules. Those
+workers need file edits and compilation, so they do not use the read-only leaf
+contract above. Give each worker a stable lemma interface, its owned files, and
+a concrete compile target; integrate the result at the actual caller and retain
+the skill's type, axiom, and reviewer checks. The general separation between
+implementation work and acceptance judgments still applies.
+
 ## Core principle: decouple FAN-OUT from JURY
 
 These are two different operations and they are governed by two different
@@ -113,32 +159,34 @@ attack axes, draft variants). Returns `candidates[]`:
 }
 ```
 
-**Extraction fan-out** — the shard *reads* a fixed input set and reports the
-units it finds (papers in a verified set, obligations in a proof). Returns
-`entries[]` with the same per-item keys, except `dedup_key` is the unit's
-**pre-existing canonical id** (assigned upstream), not a freshly normalized
-string:
+**Extraction fan-out** — the shard *reads* a fixed input set and reports
+`entries[]`. For identity-preserving extraction, such as papers in a verified
+set, `dedup_key` is the input's pre-existing canonical ID. For discovery
+extraction, such as proof obligations, the frozen coverage units are source
+units and each discovered entry receives a deterministic **post-extraction
+obligation ID** derived from its source-unit ID and stable ordinal or anchor.
+Discovered obligations are not planned coverage units.
 
 ```json
 {
-  "shard_id": "section:4.2",
+  "shard_id": "source-unit:section-4.2",
   "entries": [
     {
       "kind": "source | proof_obligation",
+      "source_unit_id": "section-4.2",
       "payload": "<the extracted record — domain fields may be inlined>",
-      "dedup_key": "<canonical id already assigned upstream: arXiv id / DOI / MC-17>"
+      "dedup_key": "<paper canonical ID, or post-extraction ID such as section-4.2:OB-003>"
     }
   ]
 }
 ```
 
 The `dedup_key` is what makes mechanical clustering possible without judgment:
-for generation, normalize titles / claim-stems / obligation-statements to a
-canonical string and cluster on string match / near-match; for extraction, the
-canonical id already identifies the unit. No model decides "are these the
-same?" by *taste* — the key decides by *normalization rule*. Domain-specific
-fields (an idea's hypothesis, a paper's method) may be inlined alongside these
-keys rather than buried in an opaque `payload`.
+for generation, normalize titles or claim stems; for identity-preserving
+extraction, retain the input ID; for discovery extraction, derive the key
+mechanically from the frozen source unit and source order. No model decides
+"are these the same?" by *taste*. Domain-specific fields may be inlined
+alongside these keys rather than buried in an opaque `payload`.
 
 ### Dedup discipline
 
@@ -160,7 +208,7 @@ judgment:
 
 Required ordering: **dedup BEFORE jury, on the merged union.** This is
 not just hygiene — it is a cost-control invariant. The jury backend
-(codex GPT-5.5 / Gemini / oracle-pro) is the rate-limited,
+(codex GPT-6-Astra / Gemini / oracle-pro) is the rate-limited,
 token-expensive resource. Sending it 40 candidates of which 25 are
 near-duplicate is a waste of the scarce cross-model budget and invites
 rate-limit failure mid-verdict. Mechanical dedup on the cheap
@@ -212,7 +260,7 @@ in series — Thread 1 writes the strongest 200-word rejection memo; Thread
 rejection points and adjudicates each. There is **no `Agent` tool** in
 its `allowed-tools`; the "fan" is the decomposition into per-point
 obligations, run sequentially with context reset between threads. The
-jury here is cross-model by construction — both threads are GPT-5.5
+jury here is cross-model by construction — both threads are GPT-6-Astra
 adjudicating a Claude-executor's paper, and **the skill code computes the
 final verdict from per-point counts; the codex thread is forbidden from
 emitting the top-level verdict** (`Verdict is computed by the skill, not
@@ -229,28 +277,17 @@ these lenses run as parallel shards; on Tier 3 they are enumerated in one
 pass. After fan-out the merged set should be **mechanically deduped only**
 (cluster near-identical ideas; never drop one for being "weak"). The
 **jury** is the already-existing Phase-4 cross-model devil's-advocate
-pass: GPT-5.5 via Codex MCP surfaces the strongest reviewer objection per
-idea and ranks for a top venue. `/idea-creator` does **not** currently
-declare the `Agent` tool — it was stripped in the WB2 least-privilege
-sweep because its body does not yet fan out. The WB3 fan-out refactor
-re-grants `Agent` in the *same* change that wires these lens shards and
-fixes the Phase-3 gap below (per the re-grant rule in **Allowed-tools
-hygiene**). On a Tier-1 runtime the lenses then run as Workflow shards;
-on Tier 3 they fall back to sequential enumeration with no grant needed.
+pass: GPT-6-Astra via Codex MCP surfaces the strongest reviewer objection per
+idea and ranks for a top venue. `/idea-creator` declares the `Agent` tool — re-granted (per the re-grant
+rule in **Allowed-tools hygiene**) when the lens fan-out was wired, after
+the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
+the lenses run as Workflow shards; on Tier 3 they fall back to sequential
+enumeration with no grant needed.
 
-> ⚠️ **Known gap — idea-creator is an *aspirational* example here, not yet a clean one.**
-> Today `/idea-creator` Phase 3 (`skills/idea-creator/SKILL.md:159,175`)
-> does same-family *quick novelty check + feasibility gating* and
-> **eliminates ideas** before the Phase-4 cross-model jury ever sees them.
-> That is exactly the ❌ "executor pre-filters the jury's input with
-> same-family quality judgment" this doc forbids above — a Type-B
-> novelty/quality verdict made same-family (see
-> [`acceptance-gate.md`](acceptance-gate.md)). The fan-out refactor must
-> push all novelty/quality elimination INTO (or after) the Phase-4
-> cross-model jury; Phase 3 keeps only mechanical dedup + *objective*
-> feasibility (compute/time budget), and every non-duplicate idea reaches
-> the jury. Fixing this is part of fanning the skill out, not a separate
-> chore.
+> **Current state.** Phase 3 performs mechanical deduplication and objective
+> compute/data-availability gating only. Novelty, impact, and quality remain
+> annotations until the classified Phase-4 jury. Every feasible non-duplicate
+> candidate reaches the Phase-4 jury.
 
 ### `/research-lit` — per-source fan-out, deterministic gate as "jury"
 
@@ -269,10 +306,27 @@ so there is no same-family-self-judgment risk to begin with. When the
 cross-model-family rule is automatically satisfied (a process is not a
 model family). Fan out freely.
 
+## Shard safety invariants
+
+Two invariants keep a fan-out from manufacturing or laundering errors:
+
+- **Shards are read-only on shared artifacts.** A shard may read the repo/workspace and
+  return its findings; it must NOT write shared state, mutate files the executor or other
+  shards also touch, or rank/drop another shard's output. The *only* write is the
+  post-merge executor write, after dedup. This forecloses silent world-model divergence
+  (parallel agents mutating a shared workspace and integrating into conflicts only
+  discovered at composition time).
+- **Don't inherit the upstream premise unchecked.** When a phase's jury reviews work built
+  on a load-bearing upstream artifact (a prior phase's claim, a cited number, an earlier
+  agent's conclusion), give the jury the *path to that upstream artifact* and ask it to
+  check the dependency, not just the local step. Otherwise one plausible-but-wrong upstream
+  assertion is treated as ground truth and amplified down the chain — a cascading
+  hallucination that compounds instead of self-correcting.
+
 ## Cross-references
 
 - **`reviewer-routing.md`** — jury backend selection. The cross-model
-  jury step routes through Codex MCP (`gpt-5.5`, `xhigh`) by default, or
+  jury step routes through Codex MCP (`gpt-6-astra`, at the call's tier — deep-audit `ultra` / regular `xhigh`) by default, or
   Oracle MCP (`gpt-5.5-pro`) under `— reviewer: oracle-pro`. Fan-out
   tier never changes the jury backend.
 - **`reviewer-independence.md`** — the jury call receives **file paths
@@ -332,12 +386,14 @@ This matters because the other two tiers need no per-skill grant:
   Correctly, `kill-argument` does **not** grant `Agent`.
 
 So `Agent` is needed *only* for the Tier-2 form, *only* in skills that
-genuinely fan out. As of the WB2 least-privilege sweep, **no mainline skill
-spawns Claude subagents in its body**, so no mainline skill grants `Agent`.
-(48 vestigial grants — pure copied boilerplate, never invoked — were
-removed.) Note that "reviewer **sub-agent**" in several skills refers to the
-cross-model *codex/GPT reviewer*, not the Agent tool, and never implied a
-real grant need.
+genuinely fan out. The WB2 least-privilege sweep removed 48 vestigial grants
+(pure copied boilerplate, never invoked); since then **only skills that
+genuinely fan out at Tier-2 re-grant `Agent`, and each must cite this doc in
+its body** (enforced by `check_skills_inventory.py`). As of writing those are
+`idea-creator`, `proof-checker`, `research-lit`, and `lean-formalize` (owned-module
+implementation as described above). Note that "reviewer
+**sub-agent**" in several skills refers to the cross-model *codex/GPT
+reviewer*, not the Agent tool, and never implied a real grant need.
 
 **Re-granting rule.** A skill that adds genuine fan-out re-introduces
 `Agent` to its `allowed-tools` **in the same change that adds the fan-out

@@ -1,7 +1,7 @@
 ---
 name: experiment-queue
 description: SSH job queue for multi-seed/multi-config ML experiments with OOM-aware retry, stale-screen cleanup, and wave-transition race prevention. Use when user says "batch experiments", "队列实验", "run grid", "multi-seed sweep", "auto-chain experiments", or when /run-experiment is insufficient for 10+ jobs that need orchestration.
-argument-hint: [manifest-or-grid-spec]
+argument-hint: "[manifest-or-grid-spec]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(run-experiment), Skill(monitor-experiment)
 ---
 
@@ -37,6 +37,12 @@ Based on session audit (2026-04-16), the major wall-clock sinks in multi-seed gr
 All of these are pure engineering friction that can be orchestrated.
 
 ## Core Concepts
+
+> **Environment contract**: queue jobs assume the target env is already built
+> and validated per `../shared-references/compute-env-contract.md` (spec-hash
+> ledger + kernel witness). A wave of jobs dying at import time = the env
+> contract was skipped, not a queue bug; check the provider's
+> `.aris/compute/<provider>.md` ledger before re-queueing.
 
 ### Job Manifest
 
@@ -81,8 +87,18 @@ jobs:
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
                  ↘ failed_other → stuck (needs manual inspection)
-stale_screen_detected → cleaned → pending
+stale screen (process gone, screen lingering) → failed_other → stuck
 ```
+
+> **Operator note on `stuck` (the agent's move, not the queue's):** the queue
+> deterministically parks `failed_other` jobs as `stuck` — that part is code and
+> unchanged. Before handing a `stuck` batch to the human, the OPERATING AGENT
+> should check: if the same failure repeats across jobs, try ONE clean
+> reimplement of the **agent-generated wrapper/attempt script only** — never
+> user/project source, the manifest, queue state, logs, or results (per
+> [`external-cadence.md`](../shared-references/external-cadence.md), "Let a broken attempt restart, not just patch").
+> Reserve the human handoff for contract/environment doubts, not merely broken
+> attempt code.
 
 ### Wave Orchestration
 
@@ -242,20 +258,22 @@ phases:
       N: [384, 512]
     template:
       cmd: python run_train.py --direction c --backbone softmax --n_hidden ${N} ...
-      output_check: checkpoints/transformer/teacher_L96_K500_N${N}.pt
+      expected_output: checkpoints/transformer/teacher_L96_K500_N${N}.pt
   
   - name: distill_students
-    depends_on: train_teachers
+    depends_on: [train_teachers]        # must be a LIST, even for a single dependency
     grid:
       N: [384, 512]
       seed: [42, 200, 201]
     template:
       cmd: python run_distill.py --n_hidden ${N} --seed ${seed} ...
-      output_check: figures/distill_sw_N${N}_*_seed${seed}.json
+      expected_output: figures/distill_sw_N${N}_*_seed${seed}.json
 ```
 
-Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until all
-`train_teachers` jobs are `completed`.
+Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until every
+`train_teachers` job is terminal — `completed` **or** `stuck`. A failed teacher does not
+hold its students back, so check `queue_state.json` for `stuck` jobs before trusting a
+dependent wave.
 
 ## OOM Handling
 
@@ -338,7 +356,10 @@ If scheduler crashes / is killed:
 - **Idempotent scheduler** — safe to restart; picks up from state file
 - **Expected-output-based completion** — don't trust screen state alone; verify output file exists
 - **Bounded retry** — max N OOM retries, then mark `stuck` and alert
-- **Dependencies enforced at launch** — never launch student before teacher checkpoint exists
+- **Dependencies enforced at launch** — a wave launches only after every job in the phases it
+  depends on has reached a terminal state. Note "terminal" includes `stuck`: if a teacher job
+  fails, the phase still completes and its students launch against a missing checkpoint. Check
+  `queue_state.json` for `stuck` jobs before trusting a dependent wave's results.
 
 ## Known Failure Modes
 

@@ -3,7 +3,7 @@
 
 # pi-autoresearch
 ### Autonomous experiment loop for pi
-**[Install](#install)** · **[Usage](#usage)** · **[How it works](#how-it-works)**
+**[Website](https://davebcn87.github.io/pi-autoresearch/)** · **[Documentation](https://davebcn87.github.io/pi-autoresearch/configuration.html)** · **[Install](#install)** · **[Usage](#usage)** · **[How it works](#how-it-works)**
 
 </div>
 
@@ -23,6 +23,15 @@ Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch). W
 
 ```bash
 pi install npm:pi-autoresearch
+pi
+```
+
+Or load the package for one session only with `pi -e npm:pi-autoresearch`.
+
+Then start the loop inside pi:
+
+```text
+/autoresearch optimize unit test runtime, monitor correctness
 ```
 
 ## What's included
@@ -44,10 +53,15 @@ pi install npm:pi-autoresearch
 
 | Subcommand | Description |
 |------------|-------------|
+| `/autoresearch` or `/autoresearch help` | Show help without activating autoresearch mode. `--help` and `-h` work too. |
 | `/autoresearch <text>` | Enter autoresearch mode. If `.auto/prompt.md` exists, resumes the loop with `<text>` as context. Otherwise, sets up a new session. |
 | `/autoresearch off` | Leave autoresearch mode. Stops auto-resume and clears runtime state but keeps `.auto/log.jsonl` intact. |
+| `/autoresearch finalize` | Stop the loop like `off` (aborting a run in progress), then load the `autoresearch-finalize` skill to turn kept experiments into reviewable branches. |
 | `/autoresearch clear` | Delete `.auto/log.jsonl`, reset all state, and turn autoresearch mode off. Use this for a clean start. |
 | `/autoresearch export` | Open a live dashboard in your browser. Auto-updates as experiments run. |
+| `/autoresearch dashboard` | Open the fullscreen scrollable dashboard overlay in the terminal. Navigate with `↑`/`↓`/`j`/`k`, `PageUp`/`PageDown`/`u`/`d`, `g`/`G` for top/bottom, `Escape` or `q` to close. |
+
+Subcommands autocomplete: type `/autoresearch ` and pick one from the list, or start typing (`/autoresearch fi` → `finalize`).
 
 **Examples:**
 
@@ -55,35 +69,67 @@ pi install npm:pi-autoresearch
 /autoresearch optimize unit test runtime, monitor correctness
 /autoresearch model training, run 5 minutes of train.py and note the loss ratio as optimization target
 /autoresearch export
+/autoresearch dashboard
 /autoresearch off
+/autoresearch finalize
 /autoresearch clear
 ```
 
-### Keyboard shortcuts
+### Keyboard shortcuts (opt-in)
 
-| Shortcut     | Description |
-|--------------|-------------|
-| `Ctrl+Shift+F` | Open fullscreen scrollable dashboard overlay. Navigate with `↑`/`↓`/`j`/`k`, `PageUp`/`PageDown`/`u`/`d`, `g`/`G` for top/bottom, `Escape` or `q` to close. |
+No shortcuts are bound by default — pi's built-in keymap grows with every release,
+so any default chord eventually collides with it (this happened with `ctrl+shift+f`
+vs. pi's transcript search). Every action is available as a `/autoresearch`
+subcommand instead.
 
-To avoid conflicts with other pi extensions, override or disable these shortcuts in
-`<agent-dir>/extensions/pi-autoresearch.json`. `<agent-dir>` is the active pi profile
-config directory (usually `~/.pi/agent`, or `PI_CODING_AGENT_DIR` when set):
+To opt in, add chords to `<agent-dir>/extensions/pi-autoresearch.json`
+(`<agent-dir>` is usually `~/.pi/agent`, or `PI_CODING_AGENT_DIR` when set).
+Omitted or `null` keys stay unbound:
 
 ```json
 {
   "shortcuts": {
-    "fullscreenDashboard": "ctrl+shift+y"
+    "fullscreenDashboard": "ctrl+shift+y",
+    "export": "alt+shift+e",
+    "off": null
   }
 }
 ```
 
-Use `null` to skip registering a shortcut. Omitted shortcuts keep their defaults.
+Each key binds its `/autoresearch` subcommand: `fullscreenDashboard` → `dashboard`,
+`export` → `export`, `off` → `off`.
+
+Pick a chord that's free in [pi's built-in keybindings](https://github.com/badlogic/pi-mono/blob/main/docs/keybindings.md)
+and your `<agent-dir>/keybindings.json` — extension shortcuts win conflicts, so a
+clashing chord hijacks the built-in action.
+
+#### Picking a free chord (guidance for agents)
+
+Don't guess a chord — check it against the installed pi's built-in keymap first:
+
+```bash
+PI_ROOT=$(ls -d ~/.pi/pkg/pi-* 2>/dev/null | sort -V | tail -1)
+[ -n "$PI_ROOT" ] || PI_ROOT="$(npm root -g)/@earendil-works/pi-coding-agent"
+node --input-type=module -e '
+const { KEYBINDINGS } = await import(process.argv[1] + "/dist/core/keybindings.js");
+const taken = new Set(Object.values(KEYBINDINGS).flatMap(({ defaultKeys }) => defaultKeys).map((key) => key.toLowerCase()));
+console.log(taken.has(process.argv[2].toLowerCase()) ? "TAKEN" : "FREE");
+' "$PI_ROOT" ctrl+shift+y
+```
+
+Chords in `<agent-dir>/keybindings.json` values are also taken. Write a
+verified-free chord into `<agent-dir>/extensions/pi-autoresearch.json`, then
+`/reload` pi and confirm no `Extension shortcut conflict` warning appears.
+
+`ctrl+shift+y`, `ctrl+shift+u`, `alt+shift+f`, and `ctrl+alt+d` are free as of
+pi 0.84.x. Always re-verify — pi's keymap grows over time, which is why this
+extension binds nothing by default.
 
 ### UI
 
 - **Dashboard widget** — always visible above the editor: a full results table with columns for commit, metric, status, and description.
 - **Confidence score** — after 3+ runs, shows how the best improvement compares to the session noise floor. ≥2.0× (green) = likely real, 1.0–2.0× (yellow) = above noise but marginal, <1.0× (red) = within noise.
-- **Fullscreen overlay** — `Ctrl+Shift+F` opens a scrollable full-terminal dashboard. Shows a live spinner with elapsed time for running experiments.
+- **Fullscreen overlay** — `/autoresearch dashboard` opens a scrollable full-terminal dashboard. Shows a live spinner with elapsed time for running experiments.
 
 ### Skills
 
@@ -129,9 +175,11 @@ Then `/reload` in pi.
 
 ### 1. Start autoresearch
 
+```text
+/autoresearch optimize unit test runtime, monitor correctness
 ```
-/skill:autoresearch-create
-```
+
+This activates autoresearch mode and makes the experiment tools available. If `.auto/prompt.md` does not exist, it also loads the `autoresearch-create` skill. Calling `/skill:autoresearch-create` directly does not activate the mode, so the tools remain unavailable in a fresh session.
 
 The agent asks about your goal, command, metric, and files in scope — or infers them from context. It then creates a branch, writes `.auto/prompt.md` and `.auto/measure.sh`, runs the baseline, and starts looping immediately.
 
@@ -149,15 +197,17 @@ Every result is appended to `.auto/log.jsonl` in your project — one line per r
 ### 3. Finalize into reviewable branches
 
 ```
-/skill:autoresearch-finalize
+/autoresearch finalize
 ```
+
+This stops the loop (aborting a run in progress) and loads the `autoresearch-finalize` skill. Loading the skill directly with `/skill:autoresearch-finalize` leaves autoresearch mode on, so a running loop keeps going.
 
 The agent reads `.auto/log.jsonl`, groups kept experiments into logical changesets, proposes the grouping for your approval, then creates independent branches from the merge-base. Each commit includes metric improvements in the message. Groups must not share files, so branches can be reviewed and merged independently.
 
 ### 4. Monitor progress
 
 - **Widget** — full results table, always visible above the editor
-- **`Ctrl+Shift+F`** — fullscreen scrollable dashboard overlay (config key: `shortcuts.fullscreenDashboard`)
+- **`/autoresearch dashboard`** — fullscreen scrollable dashboard overlay (optional chord: `shortcuts.fullscreenDashboard`)
 - **`/autoresearch export`** — open a live browser dashboard with chart and share card
 - **`Escape`** — interrupt anytime and ask for a summary
 
@@ -325,6 +375,14 @@ Drop executable scripts in `.auto/hooks/` to run code at iteration boundaries. H
 
 1. **Install pi** — follow the instructions at [pi.dev](https://pi.dev/)
 2. **An API key** for your preferred LLM provider (configured in pi)
+
+## Security and trust
+
+Pi packages run with your full user permissions. Review this repository before installing it, and run autoresearch in a dedicated branch or worktree with a clean working tree.
+
+Autoresearch intentionally edits files, creates and reverts commits, and executes the commands in `.auto/measure.sh`, `.auto/checks.sh`, and `.auto/hooks/`. Treat those files as executable code: review them before each session, keep credentials and sensitive files out of scope, and use a sandbox or restricted environment for untrusted projects.
+
+For reproducible installs, pin a version you have reviewed, for example `pi install npm:pi-autoresearch@1.7.0`. Published npm releases include provenance attestations.
 
 ## Controlling costs
 

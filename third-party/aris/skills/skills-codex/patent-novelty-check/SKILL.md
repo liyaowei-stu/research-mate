@@ -1,11 +1,22 @@
 ---
 name: patent-novelty-check
 description: "Assess patent novelty and non-obviousness against prior art. Use when user says \"专利查新\", \"patent novelty\", \"可专利性评估\", \"patentability check\", or wants to evaluate if an invention is patentable."
-argument-hint: [invention-description-or-brief-path]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch
+argument-hint: "[invention-description-or-brief-path]"
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
 ---
 
 # Patent Novelty and Non-Obviousness Check
+
+> **Before each reviewer slot**, follow [Selectable Reviewers](../shared-references/reviewer-backends.md):
+> resolve invocation → `.aris/reviewer.json` → Codex default (fresh native reviewer)
+> with `reviewer_route.py` through the canonical helper resolver, preserving this
+> slot's tier, fresh contexts, source/image inputs and deterministic gates.
+> Codex examples/pins below apply only to `backend=codex`; other routes use their
+> own first-call/reply contract. Save the route and actual returned identity;
+> unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
+> families/completion/scope. Forward invocation reviewer/model/effort overrides
+> to reviewer-bearing children. Generation workers are unchanged.
+
 
 Assess patentability of: **$ARGUMENTS**
 
@@ -13,7 +24,7 @@ Adapted from `/novelty-check` for patent legal standards. Research novelty is NO
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.5` — Model used via Codex MCP for cross-model examiner verification
+- `REVIEWER_MODEL = gpt-6-astra` — Fresh Codex examiner; same-family provisional in the base mirror
 - `NOVELTY_STANDARD = patent` — Always use legal patentability standard, not research contribution standard
 
 ## Inputs
@@ -74,13 +85,15 @@ Format as a matrix:
 |-------------|---------|-----------|-----------------|----------------------|----------|
 | Ref1 + Ref2 | Ref1 | Ref2 | Feature D | Same field, similar problem | Yes/No |
 
-### Step 4: Cross-Model Examiner Verification
+### Step 4: Fresh-Agent Examiner Verification (same-family provisional)
 
 Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 
+> Resolve this reviewer slot first; the following is the `backend=codex` example.
+
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].
@@ -133,8 +146,8 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 ### Obviousness Analysis
 [combination analysis with motivation to combine]
 
-### Cross-Model Examiner Review
-[summary of GPT-5.5 examiner feedback]
+### Review-Independence Metadata
+[summary of GPT-6-Astra examiner feedback]
 
 ### Recommended Claim Amendments
 [If claims need modification to overcome prior art, suggest specific amendments]

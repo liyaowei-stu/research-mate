@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-06
+
+### Added
+
+- `/autoresearch finalize` stops the loop and loads the `autoresearch-finalize` skill. It turns autoresearch mode off like `/autoresearch off` (cancelling a pending auto-resume and aborting a run in progress), waits for the agent to go idle, and then starts the skill on a fresh turn. Previously `finalize` was treated as a goal: mid-loop it was rejected with "Autoresearch already active" while the loop kept running, and with the loop off it started a new research session with the goal "finalize". Without a logged experiment run it reports an error instead of starting a session.
+- `/autoresearch` subcommands (`off`, `finalize`, `clear`, `export`, `dashboard`, `help`) now autocomplete as you type, each with a one-line description. A subcommand typed in full still runs on the first Enter.
+
+### Fixed
+
+- `/autoresearch help` (also `--help` and `-h`) shows the usage text. Previously only a bare `/autoresearch` did; with the loop off, `/autoresearch help` started a research session with the goal "help".
+- Without a keyboard shortcut configured, the dashboard widget's hint reads `/autoresearch dashboard`. It used to read `/autoresearch dashboard fullscreen`, which isn't a subcommand: typed while the loop was running, it was rejected with "Autoresearch already active" instead of opening the dashboard.
+
+## [1.8.1] - 2026-09-08
+
+### Fixed
+
+- `/autoresearch <goal>` without a `.auto/prompt.md` sent the literal text `/skill:autoresearch-create …` to the model instead of the skill's contents, because `pi.sendUserMessage()` does not expand skill commands by default. Models would reply with things like `Unknown command: /skill:autoresearch-create` (#93). The kickoff is now sent with `expandPromptTemplates: true` (pi ≥ 0.84.2).
+
+## [1.8.0] - 2026-09-08
+
+### Added
+- After every logged experiment, `log_experiment` now asks the agent to check whether the latest result invalidates a previous discard's rollback reason before choosing the next experiment. Ideas discarded because "X was the bottleneck" get a second look once X stops being the bottleneck.
+- Intentional retries can be annotated with `asi.revisits_run: <run number>`; the transcript then shows a `↻ Revisiting #N` line under the logged result so a retry is distinguishable from the agent forgetting a failure.
+- The `.auto/prompt.md` template's "What's Been Tried" section now asks for the conditions that would justify revisiting a discarded idea, so that knowledge survives compaction.
+
+## [1.7.0] - 2026-08-31
+
+### Changed
+
+- **Breaking:** no keyboard shortcuts are bound by default anymore. The fullscreen dashboard default chord `ctrl+shift+f` collided with pi 0.84.2's new built-in transcript search (#86) — and any hardcoded default will eventually collide with a future pi built-in. Shortcuts are now strictly opt-in via `<agent-dir>/extensions/pi-autoresearch.json`. To restore the old behavior: `{ "shortcuts": { "fullscreenDashboard": "ctrl+shift+f" } }`.
+
+### Added
+
+- `/autoresearch dashboard` subcommand opens the fullscreen dashboard overlay — the keyboard-free way to reach it.
+- The `export` (`/autoresearch export`) and `off` (`/autoresearch off`) actions can now be bound to opt-in shortcuts alongside `fullscreenDashboard`.
+- README guidance (aimed at agents) for verifying a chord against the installed pi's built-in keymap before writing it to the shortcut config.
+
+## [1.6.2] - 2026-07-09
+
+### Changed
+
+- Raised the autoresearch auto-resume ceiling from 20 to 200 turns, while adding a stuck-loop override that stops auto-resume after more than 20 consecutive `discard` or `crash` results in the current segment.
+
+## [1.6.1] - 2026-07-02
+
+### Fixed
+
+- Redirected `workingDir` logs no longer auto-activate autoresearch in unrelated pi sessions.
+- `/autoresearch off` now persists across `/tree`, compaction, and reloads: a manual off is recorded as a session activation decision and is no longer overridden just because `log.jsonl` still exists.
+
 ## [1.6.0] - 2026-06-08
 
 ### Changed

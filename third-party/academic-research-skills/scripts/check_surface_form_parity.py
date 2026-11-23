@@ -255,8 +255,14 @@ def validate(data: dict[str, Any], manifest: dict[str, Any] | None = None) -> li
         # --- exception <-> reason pairing (both ways) ---
         # has_reason must require a real non-empty STRING (codex P2 round 12): str(None) is the
         # non-empty 'None', so a null exception_reason would otherwise read as present.
+        # A non-string reason (int, list, bool) must also fail on its own (#968): treating it
+        # as absent lets a stray typed reason on a non-exception item pass.
         is_exception = item.get("exception") is True
         reason_val = item.get("exception_reason")
+        if reason_val is not None and not isinstance(reason_val, str):
+            errors.append(
+                f"{where}: exception_reason must be a string, got {type(reason_val).__name__}"
+            )
         has_reason = isinstance(reason_val, str) and bool(reason_val.strip())
         if is_exception and not has_reason:
             errors.append(f"{where}: exception=true but exception_reason missing/empty")
@@ -391,13 +397,25 @@ def render_judge_view(item: dict[str, Any], index: int) -> dict[str, Any]:
     return {"handle": f"item-{index}", JUDGE_VISIBLE_CONTENT_KEY: item[JUDGE_VISIBLE_CONTENT_KEY]}
 
 
+class _YamlUnavailableError(RuntimeError):
+    """pyyaml is missing, so a present manifest cannot be parsed at all."""
+
+
 def _load_manifest(path: Path) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
         import yaml  # type: ignore
-    except ImportError:
-        return None
+    except ImportError as exc:
+        # Do NOT fold this into the None (missing-file) path: the manifest is
+        # present but the environment cannot parse it. Returning None here made
+        # main() report the manifest as "empty / null / non-mapping", sending the
+        # reader to the wrong file. pyyaml is declared in requirements-dev.txt.
+        raise _YamlUnavailableError(
+            f"manifest at {path} exists but pyyaml is not installed, so it cannot "
+            f"be parsed — install the dev dependencies (pip install -r "
+            f"requirements-dev.txt) and re-run"
+        ) from exc
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
@@ -408,7 +426,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     data = json.loads(args.gold_set.read_text(encoding="utf-8"))
-    manifest = _load_manifest(args.manifest)
+    try:
+        manifest = _load_manifest(args.manifest)
+    except _YamlUnavailableError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     # Guard the manifest shape BEFORE validate() (codex P3 round 9): a YAML scalar/list makes
     # _load_manifest return a non-dict, and passing it to validate() would call manifest.get and

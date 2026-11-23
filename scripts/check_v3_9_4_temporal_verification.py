@@ -39,7 +39,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = REPO_ROOT / "shared/contracts/passport"
 
 BIBLIOGRAPHY_AGENT_PATH = REPO_ROOT / "deep-research/agents/bibliography_agent.md"
-BIBLIOGRAPHY_AGENT_SHA256 = "4d8bee0615ca2045af805b1cdae2566b349827a3c17a2f494c601631632db70c"  # #272 guidance-layer baseline; F2 ownership guard per spec §3.4 + §3.6. The #272 guidance layer inlined the retrieved-content instruction/data standing principle into Core Principles; NO M6 citation-provenance / M5 version-family / temporal logic added, so the ownership invariant the hash protects is intact. (Previous baseline 3c2b91d… was the post-v3.10-PR-B state.)
+BIBLIOGRAPHY_AGENT_SHA256 = "7d8f93dda16738b1fd66127148003222a40dc7191918a0c05cf059653ec82dea"  # #973 baseline: the Phase Boundary enforcement sentence states the write-scope guard's actual coverage condition; NO temporal/M6/M5 logic touched, ownership invariant intact. Previous accepted #916/#738/#660/#651/#548/#511 additions remain covered by the same rule.
 
 
 def _validate(yaml_path: Path, schema_path: Path) -> list[str]:

@@ -11,7 +11,7 @@ Target: **$ARGUMENTS**
 
 ## Why this skill exists
 
-`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
+`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`, `/firecrawl-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
 
 This contradicts the Karpathy LLM-wiki design (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
 
@@ -56,6 +56,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 [ -d research-wiki/ ] || { echo "ERROR: research-wiki/ not found. Run /research-wiki init first." >&2; exit 1; }
 
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+  ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
@@ -128,8 +131,8 @@ The fetch chain runs **in order** until one returns usable content (>200 chars o
 
 | Order | Source | How |
 |-------|--------|-----|
-| 1 | **alphaxiv overview** (`auto` default; `--source alphaxiv` to pin) | `WebFetch https://alphaxiv.org/overview/<arxiv_id>.md` — LLM-optimized summary, often best for filling sections |
-| 2 | **alphaxiv abs** (fallback within alphaxiv) | `WebFetch https://alphaxiv.org/abs/<arxiv_id>.md` |
+| 1 | **alphaxiv overview** (`auto` default; `--source alphaxiv` to pin) | `WebFetch https://www.alphaxiv.org/overview/<arxiv_id>.md` — LLM-optimized summary, often best for filling sections |
+| 2 | **alphaxiv abs** (fallback within alphaxiv) | `WebFetch https://www.alphaxiv.org/abs/<arxiv_id>.md` |
 | 3 | **deepxiv brief** (`--source deepxiv` to pin) | `python3 "$DEEPXIV_FETCHER" paper-brief <arxiv_id>` if helper resolves |
 | 4 | **arXiv API abstract — fresh fetch** (`--source arxiv` to pin) | `curl http://export.arxiv.org/api/query?id_list=<arxiv_id>` — log label: `arxiv-api-abstract` |
 | 5 | **Page abstract — fallback** (last resort) | Reuse the existing `## Abstract (original)` blockquote already present in the page body from a prior `ingest_paper` run — log label: `page-abstract-fallback` |
@@ -160,7 +163,7 @@ Write each TODO section's body following these rules:
 | Limitations / Failure Modes | 1-3 bullets | Honest | What the paper explicitly admits OR what's structurally absent (e.g. "no multi-node evaluation", "assumes uniform request length") |
 | Reusable Ingredients | 1-3 bullets | Concrete | Techniques / datasets / insights from this paper that could be ported elsewhere. **Highest value for `/idea-creator` — write carefully.** |
 | Open Questions | 1-2 bullets | Question form | What the paper does NOT answer but raises |
-| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /result-to-claim._`. Else list claim node IDs. |
+| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /proof-checker._`. Else list claim node IDs. |
 | Relevance to This Project | 1-2 sentences | Project-contextual | Use `RESEARCH_BRIEF.md` / `CLAUDE.md` / `gap_map.md` to phrase the connection. If no project context, write the literal italic line: `_Project context not yet set — populate RESEARCH_BRIEF.md or gap_map.md to enable this section._` and report. |
 
 **Rules** (Karpathy fidelity):

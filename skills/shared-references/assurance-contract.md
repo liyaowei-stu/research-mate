@@ -6,6 +6,12 @@ This contract is referenced by `paper-writing`, `paper-claim-audit`, `citation-a
 `proof-checker`, and the external verifier (canonical name `verify_paper_audits.sh`;
 callers resolve the actual path via `integration-contract.md` §2).
 
+Reviewer selection and actual-model evidence follow
+[reviewer-backends.md](reviewer-backends.md) and
+[reviewer-routing.md](reviewer-routing.md). Claude Code retains Codex MCP as its
+host default; a project or invocation may select another supported route. The
+transport does not change an audit's evidence or acceptance requirements.
+
 ## Why a separate axis from `effort`
 
 Historically `effort` (lite/balanced/max/beast) was conflated with audit strictness.
@@ -102,7 +108,12 @@ human-readable Markdown sibling). The JSON must contain at minimum:
   },
   "trace_path": ".aris/traces/paper-claim-audit/2026-04-21_run01/",
   "thread_id":  "019dae73-fc12-4ab8-...",
-  "reviewer_model": "gpt-5.5",
+  "executor_model": "claude-opus-4-8",
+  "executor_family": "anthropic",
+  "reviewer_model": "gpt-6-astra",
+  "reviewer_family": "openai",
+  "review_independence": "cross-family",
+  "acceptance_status": "accepted",
   "reviewer_reasoning": "xhigh",
   "generated_at": "2026-04-21T14:23:01Z",
   "details": {
@@ -125,10 +136,39 @@ Field semantics:
     after running `paper-claim-audit`? The next verifier run will catch it.)
 - **`trace_path`** — directory containing the full reviewer prompt + response
   pair, per `review-tracing.md`. Required for mandatory audits — not optional.
-- **`thread_id`** — Codex MCP thread ID, for forensic traceability.
-- **`reviewer_model`** + **`reviewer_reasoning`** — proves cross-family review
-  invariant was honored.
+- **`thread_id` or `agent_id`** — durable reviewer handle. MCP routes use a
+  thread ID; Codex `spawn_agent` routes use an agent ID. At least one is required.
+- **`reviewer_model`** — actual backend-reported model, with its evidence source
+  preserved in the trace. A requested alias or bridge name is not actual model
+  evidence. Derive both model families from their identities: Claude Code can
+  run DeepSeek and Antigravity can run Claude. The family relation is distinct
+  from independent identity attestation.
+- **`reviewer_reasoning`** — actual reported effort, or `null` when unavailable
+  (for example, the local Claude Code bridge does not expose effort). The key
+  remains required. Missing effort evidence does not relax model-identity checks.
+- **`review_independence`** — `same-family`, `cross-family`, or `deterministic`.
+  `deterministic` is valid ONLY for what a process can actually decide
+  (compilation, schema validity, hash freshness, test suites) — the audit
+  aggregator REJECTS a deterministic label on the four semantic paper audits
+  (proof / claims / citations / attack), which only a cross-family model
+  review can accept.
+  **`acceptance_status`** remains `provisional` for same-family review. A positive
+  model review can be `accepted` only after successful completion within the
+  required scope, with known different actual executor/reviewer families. A
+  same-family positive review may stop the drive loop provisionally. Provider
+  selection, effort settings or installation of an overlay do not confer
+  acceptance. Failed, unknown-identity or incomplete reviews never become a
+  fabricated PASS. A deterministic verifier can accept only what it actually
+  checks, subject to the semantic-audit restriction above. Neither metadata
+  field rewrites the substantive verdict.
 - **`generated_at`** — UTC ISO-8601 timestamp.
+
+For cross-family `PASS`/`WARN` artifacts, `acceptance_status` must be
+`accepted`; same-family artifacts always require `provisional`. Cross-family
+`FAIL`, `ERROR` and `BLOCKED` artifacts may record `provisional` for new routes,
+or retain the historical `accepted` classification of review evidence. Both
+forms are schema-readable and still block submission by their substantive
+verdict. Unknown model identity remains blocking regardless of that label.
 
 ## Verifier Contract
 
@@ -145,6 +185,12 @@ Field semantics:
 6. Verify `trace_path` exists and is non-empty.
 7. Output a structured JSON report and exit 0 (all green) or 1 (any FAIL /
    BLOCKED / ERROR / STALE / missing artifact).
+
+The report also emits `overall_assurance`: `blocked` for a blocking condition,
+`provisional` when green artifacts include same-family or legacy-unspecified
+review, and `accepted` only when all green artifacts are cross-family or
+deterministic. Provisional remains exit 0 but must never be presented as
+submission-ready yes.
 
 Phase 6 of `paper-writing` invokes the verifier; at `assurance: submission`,
 non-zero exit blocks Final Report generation.

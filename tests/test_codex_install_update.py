@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +69,66 @@ def test_install_aris_codex_avoids_bash4_associative_arrays() -> None:
     assert "declare -A" not in text
 
 
+@pytest.mark.parametrize("quiet", [False, True])
+def test_install_aris_codex_warns_on_windows_copy_fallback(tmp_path: Path, quiet: bool) -> None:
+    repo = make_minimal_aris_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "uname").write_text('#!/bin/sh\nprintf "MINGW64_NT-10.0\\n"\n')
+    # Simulate Git Bash's copy fallback; this is not a native Windows test.
+    (shim / "ln").write_text(
+        f"#!{sys.executable}\n"
+        "import shutil, sys\n"
+        "assert len(sys.argv) == 4 and sys.argv[1] == '-s'\n"
+        "shutil.copytree(sys.argv[2], sys.argv[3])\n"
+    )
+    for command in shim.iterdir():
+        command.chmod(0o755)
+    command = [
+        "bash", str(INSTALL_SCRIPT), str(project), "--aris-repo", str(repo), "--all", "--no-doc"
+    ]
+    if quiet:
+        command.append("--quiet")
+    result = subprocess.run(
+        command, input="y\n", text=True, capture_output=True, check=True,
+        env={**os.environ, "PATH": f"{shim}{os.pathsep}{os.environ['PATH']}"},
+    )
+
+    installed = project / ".agents" / "skills" / "alpha"
+    assert installed.is_dir() and not installed.is_symlink()
+    assert result.stderr.count("Windows bash copied") == 1
+    assert "do not track upstream changes" in result.stderr
+    assert "reconcile will report conflicts" in result.stderr
+    assert "uninstall will leave them in place" in result.stderr
+    assert "Codex install complete" not in result.stdout
+
+
+def test_goal_pulse_managed_doc_preserves_user_text_and_no_doc(tmp_path: Path) -> None:
+    repo = make_minimal_aris_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    agents = project / "AGENTS.md"
+    user_text = "# My project\nKeep my instructions.\n"
+    agents.write_text(user_text)
+    command = ["bash", str(INSTALL_SCRIPT), str(project), "--aris-repo", str(repo), "--quiet"]
+
+    run(command + ["--no-doc"])
+    assert agents.read_text() == user_text
+    run(command + ["--reconcile"])
+    generated = agents.read_text()
+    assert generated.startswith(user_text)
+    assert "by default, without another confirmation" in generated
+    assert "HERO-Anti-OverDefense/tree/main/skills/goal-pulse" in generated
+    assert "`${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`" in generated
+    run(command + ["--reconcile", "--no-doc"])
+    assert agents.read_text() == generated
+    assert sorted(path.name for path in (project / ".agents" / "skills").iterdir()) == [
+        "alpha", "beta", "shared-references"
+    ]
+
+
 def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
     repo = make_minimal_aris_repo(tmp_path)
     project = tmp_path / "project"
@@ -92,6 +156,9 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
     assert "$1==repo_root" not in agents_text
     assert (project / ".agents" / "skills" / "alpha").is_symlink()
     assert (project / ".agents" / "skills" / "beta").resolve() == (repo / "skills" / "skills-codex" / "beta")
+    assert (project / ".agents" / "skills" / "shared-references").resolve() == (
+        repo / "skills" / "skills-codex" / "shared-references"
+    )
 
     run(
         [
@@ -111,6 +178,9 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
 
     (repo / "skills" / "skills-codex" / "alpha").rename(repo / "skills" / "skills-codex" / "alpha-removed")
     make_skill(repo / "skills" / "skills-codex" / "gamma", "# gamma\n")
+    # #366 selective install: a plain --quiet reconcile no longer silently adopts
+    # new upstream skills (that would defeat the point of the new-skill
+    # confirmation gate) -- it must be requested explicitly via --add-new.
     run(
         [
             "bash",
@@ -120,6 +190,7 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
             str(repo),
             "--reconcile",
             "--with-claude-review-overlay",
+            "--add-new",
             "--quiet",
         ]
     )
@@ -210,6 +281,9 @@ def test_install_aris_codex_reconcile_removes_stale_links_from_manifest_repo(tmp
     assert alpha_link.is_symlink()
     assert alpha_link.resolve() == original_repo / "skills" / "skills-codex" / "alpha"
 
+    # #366 selective install: new upstream skills need --add-new (or an
+    # interactive yes) on reconcile -- a plain --quiet reconcile only keeps
+    # what was already installed and drops what upstream removed.
     run(
         [
             "bash",
@@ -218,6 +292,7 @@ def test_install_aris_codex_reconcile_removes_stale_links_from_manifest_repo(tmp
             "--aris-repo",
             str(new_repo),
             "--reconcile",
+            "--add-new",
             "--quiet",
         ]
     )
@@ -314,6 +389,7 @@ def test_smart_update_codex_copy_install_and_symlink_refusal(tmp_path: Path) -> 
             "--local",
             str(local),
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
     assert "# alpha-v1" in (local / "alpha" / "SKILL.md").read_text()
@@ -391,6 +467,7 @@ def test_smart_update_codex_ignores_local_only_shared_reference_failures(tmp_pat
             "--local",
             str(local),
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
 
@@ -412,6 +489,7 @@ def test_smart_update_codex_local_respects_overlay(tmp_path: Path) -> None:
             "--overlay",
             "claude-review",
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
 
